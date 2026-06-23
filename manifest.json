@@ -1,0 +1,19 @@
+{
+  "name": "Ponto Digital",
+  "short_name": "Ponto",
+  "description": "Registro de ponto com reconhecimento facial — funciona offline",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1565C0",
+  "theme_color": "#1565C0",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
