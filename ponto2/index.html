@@ -245,6 +245,12 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         <label>PIN de administrador (mín. 4 dígitos)</label>
         <input id="cfgPin" type="password" placeholder="Deixe em branco para não alterar">
       </div>
+      <div class="field">
+        <label>Intervalo mínimo entre saídas do mesmo funcionário (horas)</label>
+        <input id="cfgMinH" type="number" min="0" max="24" step="1" placeholder="12">
+      </div>
+      <p class="hint">Impede que a mesma pessoa registre outra saída antes desse prazo.
+        Padrão: <b>12h</b>. Use <b>0</b> para desligar a trava (não recomendado).</p>
       <div class="field-chk">
         <input id="cfgWake" type="checkbox" checked>
         <label for="cfgWake">Manter a tela sempre ligada</label>
@@ -271,6 +277,9 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       <div class="card-title">📤 Saídas pendentes de envio</div>
       <div class="plog" id="plogList"><p class="empty-msg">Nenhum registro pendente.</p></div>
       <button class="btn btn-blue btn-full" onclick="syncNow(false)">Sincronizar com Google Sheets</button>
+      <button class="btn btn-gray btn-full" onclick="wipePunches()">🧪 Apagar registros locais (teste)</button>
+      <p class="hint" style="margin-top:8px">Apaga o histórico de saídas <b>deste aparelho</b>, inclusive os
+        pendentes ainda não enviados, e libera a trava de 12h. O que já foi para a planilha permanece lá.</p>
     </div>
 
     <!-- Instructions -->
@@ -395,7 +404,7 @@ const GESTURE_MODEL= 'https://storage.googleapis.com/mediapipe-models/gesture_re
 
 const CONFIRM_TIMEOUT = 20000;  // janela para confirmar antes de voltar a escanear
 const DONE_DURATION   =  3200;  // tempo da tela de sucesso
-const RECENT_WINDOW   = 60000;  // não repropõe saída ao mesmo rosto dentro de 1 min
+const DEFAULT_MIN_H   =    12;  // intervalo mínimo entre saídas do mesmo funcionário (horas)
 const THUMB_SCORE     =  0.62;  // confiança mínima do gesto
 const THUMB_FRAMES    =     4;  // leituras consecutivas exigidas (anti-falso-positivo)
 const GESTURE_INTERVAL=   100;  // ms entre inferências de gesto (~10 fps)
@@ -417,12 +426,14 @@ let lastGestureTs= 0;
 let confirmUntil = 0;
 let wakeLock     = null;
 let wakeWanted   = true;
+let minHours     = DEFAULT_MIN_H;
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 async function init() {
   await openDB();
   wakeWanted = await getCfg('wake', true);
   gestureOn  = await getCfg('gesture', true);
+  minHours   = await getCfg('minhours', DEFAULT_MIN_H);
 
   setLoadMsg('Carregando modelo de detecção…');
   try {
@@ -627,13 +638,12 @@ async function detect() {
 
   const m = matcher.findBestMatch(best.descriptor);
   if (m.label !== 'unknown' && m.distance < 0.55) {
-    const recent = await lastPunchOf(m.label);
-    if (recent && Date.now() - new Date(recent.timestamp).getTime() < RECENT_WINDOW) {
-      // Evita propor a mesma saída de novo enquanto a pessoa ainda está na frente da câmera.
+    const block = await exitBlock(m.label);
+    if (block) {
+      // Já registrou saída há menos de `minHours` — não propõe uma nova.
       badge.textContent   = m.label;
       badge.style.display = 'block';
-      const hh = new Date(recent.timestamp).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-      setIdleBtn(`Saída já registrada às ${hh}`);
+      setIdleBtn(blockMsg(block));
       return;
     }
     enterConfirm({name: m.label, distance: m.distance});
@@ -645,10 +655,36 @@ async function detect() {
   setIdleBtn('Rosto não reconhecido');
 }
 
-async function lastPunchOf(name) {
+// ─── TRAVA DE 12H ────────────────────────────────────────────────────────────
+// Um funcionário só pode registrar uma nova saída depois de `minHours` da última.
+// Retorna null se estiver liberado, ou {last, freeAt} se ainda estiver bloqueado.
+async function exitBlock(name) {
+  if (!minHours) return null;                       // 0 = trava desligada
   const all  = await dbAll('punches');
-  const mine = all.filter(p => p.userName === name);
-  return mine[mine.length - 1];
+  const mine = all
+    .filter(p => p.userName === name)
+    .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const last = mine[mine.length - 1];
+  if (!last) return null;
+
+  const lastAt = new Date(last.timestamp).getTime();
+  const freeAt = lastAt + minHours * 3600e3;
+  return Date.now() < freeAt ? { last, freeAt } : null;
+}
+
+function blockMsg(block) {
+  const d    = new Date(block.last.timestamp);
+  const hoje = new Date().toDateString() === d.toDateString();
+  const quando = hoje
+    ? `às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`
+    : `em ${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
+
+  const faltam = block.freeAt - Date.now();
+  const h = Math.floor(faltam / 3600e3);
+  const min = Math.ceil((faltam % 3600e3) / 60e3);
+  const restante = h > 0 ? `${h}h${String(min).padStart(2,'0')}` : `${min}min`;
+
+  return `Saída já registrada ${quando} · libera em ${restante}`;
 }
 
 // ─── CONFIRMAÇÃO ────────────────────────────────────────────────────────────
@@ -742,6 +778,17 @@ async function confirmPunch(method) {
   btn.className   = 'btn-punch';
   btn.textContent = 'Registrando…';
 
+  // Revalida a trava aqui também: a regra não pode depender da tela.
+  // Cobre a janela de 20s da confirmação e qualquer caminho que chegue até aqui.
+  const block = await exitBlock(match.name);
+  if (block) {
+    toast(blockMsg(block), 4500);
+    curMatch = null;
+    mode     = 'scanning';
+    setIdleBtn();
+    return;
+  }
+
   const locNm = await getCfg('loc','Local não configurado');
 
   let lat=null, lon=null;
@@ -832,6 +879,7 @@ async function goAdmin() {
   document.getElementById('cfgLoc').value     = await getCfg('loc','');
   document.getElementById('cfgUrl').value     = await getCfg('webhook','');
   document.getElementById('cfgPin').value     = '';
+  document.getElementById('cfgMinH').value    = minHours;
   document.getElementById('cfgWake').checked  = wakeWanted;
   document.getElementById('cfgGesture').checked = gestureOn;
   renderUserList();
@@ -855,15 +903,23 @@ async function saveSettings() {
   const pin = document.getElementById('cfgPin').value.trim();
   if (pin.length > 0 && pin.length < 4) { toast('PIN deve ter ao menos 4 dígitos.'); return; }
 
+  const rawH = document.getElementById('cfgMinH').value.trim();
+  const hrs  = rawH === '' ? DEFAULT_MIN_H : Number(rawH);
+  if (!Number.isFinite(hrs) || hrs < 0 || hrs > 24) {
+    toast('Intervalo mínimo deve ser um número entre 0 e 24 horas.'); return;
+  }
+
   const wake = document.getElementById('cfgWake').checked;
   const gest = document.getElementById('cfgGesture').checked;
 
   await setCfg('loc', loc);
   await setCfg('webhook', url);
   if (pin.length >= 4) await setCfg('pin', pin);
+  await setCfg('minhours', hrs);
   await setCfg('wake', wake);
   await setCfg('gesture', gest);
 
+  minHours   = hrs;
   wakeWanted = wake;
   if (wake) acquireWakeLock(); else releaseWakeLock();
 
@@ -899,6 +955,24 @@ async function renderPlog() {
       <span class="plog-time"> · ${new Date(p.timestamp).toLocaleString('pt-BR')}</span>
       <br><small>${esc(p.locationName)} · ${p.method==='gesto'?'gesto 👍':'botão'}</small>
     </div>`).join('');
+}
+
+// Limpa o histórico local de saídas — útil para descartar registros de teste,
+// que de outro modo manteriam o funcionário travado pelas próximas 12h.
+async function wipePunches() {
+  const all  = await dbAll('punches');
+  if (!all.length) { toast('Não há registros locais.'); return; }
+  const pend = all.filter(p => !p.synced).length;
+
+  const aviso = pend
+    ? `\n\n⚠ ATENÇÃO: ${pend} registro(s) ainda NÃO foram enviados à planilha e serão perdidos.`
+    : '';
+  if (!confirm(`Apagar os ${all.length} registro(s) de saída deste aparelho?${aviso}`)) return;
+
+  for (const p of all) await dbDel('punches', p.id);
+  toast(`${all.length} registro(s) apagados. Trava liberada.`);
+  renderPlog();
+  updPending();
 }
 
 async function delUser(id) {

@@ -24,9 +24,22 @@ confirmação explícita após o reconhecimento facial.
 
 A planilha recebe uma coluna `Confirmacao` indicando se foi `Botão` ou `Gesto 👍`.
 
-Para não duplicar o registro enquanto a pessoa continua na frente da câmera, o
-mesmo rosto não é reproposto por **1 minuto** após uma saída (mostra
-"Saída já registrada às HH:MM").
+## Trava de 12 horas
+
+Um funcionário **não consegue registrar uma nova saída antes de 12h** da última.
+Enquanto estiver travado, o app mostra o nome e
+`Saída já registrada às HH:MM · libera em 11h56` — o botão de confirmar nem aparece.
+
+A regra é verificada em **dois pontos**: ao reconhecer o rosto (não abre a
+confirmação) e de novo **imediatamente antes de gravar** — ou seja, ela não
+depende da tela para valer.
+
+Ajustável em **Admin → Configurações → Intervalo mínimo entre saídas (horas)**.
+Padrão **12**, aceita 0–24. **`0` desliga a trava** (útil só para testes).
+
+> Para descartar registros de teste que estejam segurando a trava, use
+> **Admin → 🧪 Apagar registros locais**. Isso apaga o histórico deste aparelho,
+> inclusive pendentes não enviados; o que já subiu para a planilha continua lá.
 
 ## Tela sempre ligada
 
