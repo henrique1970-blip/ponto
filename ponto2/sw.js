@@ -6,7 +6,9 @@
 //  - App: network-first com fallback a cache e à index.html.
 //  - CDN (libs/modelos): cache-first (grandes e imutáveis).
 
-const CACHE = 'ponto-saida-v1';
+// Ao trocar ícones/manifest, suba a versão: é o que faz o celular descartar o
+// cache antigo e buscar os arquivos novos.
+const CACHE = 'ponto-saida-v2';
 
 // Mesma origem — precisa funcionar para o app abrir offline.
 const CORE = [
@@ -14,6 +16,9 @@ const CORE = [
   './index.html',
   './manifest.json',
   './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png',
 ];
 
 // ── Remotos: reconhecimento facial (face-api.js) ─────────────────────────────

@@ -1,15 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="44" fill="#1565C0"/>
-  <!-- clock face -->
-  <circle cx="96" cy="96" r="62" fill="none" stroke="white" stroke-width="7"/>
-  <!-- hour markers -->
-  <line x1="96" y1="40" x2="96" y2="52" stroke="white" stroke-width="5" stroke-linecap="round"/>
-  <line x1="96" y1="140" x2="96" y2="152" stroke="white" stroke-width="5" stroke-linecap="round"/>
-  <line x1="40" y1="96" x2="52" y2="96" stroke="white" stroke-width="5" stroke-linecap="round"/>
-  <line x1="140" y1="96" x2="152" y2="96" stroke="white" stroke-width="5" stroke-linecap="round"/>
-  <!-- hands -->
-  <line x1="96" y1="96" x2="96" y2="52" stroke="white" stroke-width="6" stroke-linecap="round"/>
-  <line x1="96" y1="96" x2="124" y2="96" stroke="white" stroke-width="6" stroke-linecap="round"/>
-  <!-- center dot -->
-  <circle cx="96" cy="96" r="5" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Ponto Saída — porta com seta saindo. O fundo sangra até a borda (maskable). -->
+  <rect width="512" height="512" rx="112" fill="#C62828"/>
+  <g fill="#fff">
+    <!-- batente da porta: "[" aberto à direita -->
+    <rect x="130" y="124" width="36"  height="264" rx="14"/>
+    <rect x="130" y="124" width="138" height="36"  rx="14"/>
+    <rect x="130" y="352" width="138" height="36"  rx="14"/>
+    <!-- seta saindo pela porta -->
+    <rect x="210" y="238" width="120" height="36" rx="8"/>
+    <polygon points="306,196 306,316 392,256"/>
+  </g>
 </svg>
