@@ -13,11 +13,14 @@
 <!-- (b) Ícone do atalho no iOS (no Android quem manda é o manifest.json). -->
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Saída">
-<meta name="theme-color" content="#04A159">
+<meta name="theme-color" content="#F5821F">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  --red:#C62828;--red2:#E53935;--green:#2E7D32;--green2:#43A047;--blue:#1565C0;
+  /* --orange: fundo. --orange-ink: o mesmo laranja escurecido, para o caso em que
+     o laranja é TEXTO sobre branco (o #F5821F puro só dá 2,6:1 de contraste ali). */
+  --orange:#F5821F;--orange2:#FB9D4B;--orange-ink:#B35309;
+  --green:#2E7D32;--green2:#43A047;--blue:#1565C0;
   --bg:#F0F4F8;--card:#FFF;--text:#1A1A2E;--text2:#6B7280;
   --border:#E5E7EB;--shadow:0 1px 4px rgba(0,0,0,.12);
 }
@@ -28,13 +31,13 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .view.active{display:flex}
 
 /* ---- HEADER ---- */
-.hdr{background:var(--red);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:50px}
+.hdr{background:var(--orange);color:var(--text);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:50px}
 .hdr h1{font-size:1rem;font-weight:700;flex:1;letter-spacing:.3px}
-.hdr-btn{background:rgba(255,255,255,.18);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-size:.8rem;font-weight:600;cursor:pointer}
-.hdr-btn:active{background:rgba(255,255,255,.3)}
+.hdr-btn{background:rgba(0,0,0,.10);border:none;color:var(--text);padding:6px 13px;border-radius:20px;font-size:.8rem;font-weight:600;cursor:pointer}
+.hdr-btn:active{background:rgba(0,0,0,.2)}
 
 /* ---- STATUS BAR ---- */
-.sbar{background:#FEF2F2;border-bottom:1px solid #FECACA;padding:5px 14px;font-size:.75rem;color:#B91C1C;display:flex;align-items:center;gap:7px;flex-shrink:0}
+.sbar{background:#FFF7ED;border-bottom:1px solid #FED7AA;padding:5px 14px;font-size:.75rem;color:#C2410C;display:flex;align-items:center;gap:7px;flex-shrink:0}
 .dot{width:8px;height:8px;border-radius:50%;background:#16A34A;flex-shrink:0}
 .dot.off{background:#DC2626}
 .dot.sync{background:#EA580C;animation:blink 1s infinite}
@@ -56,7 +59,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .confirm-ov{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;
   background:linear-gradient(180deg,rgba(15,23,42,.55),rgba(15,23,42,.82));backdrop-filter:blur(2px);text-align:center;padding:16px}
 .confirm-ov.on{display:flex}
-.co-hi{font-size:.8rem;color:#FCA5A5;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+.co-hi{font-size:.8rem;color:#FDBA74;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
 .co-name{font-size:1.9rem;font-weight:800;color:#fff;line-height:1.15;max-width:92%;word-break:break-word}
 .co-thumb{font-size:3.2rem;line-height:1;animation:pulse 1.4s ease-in-out infinite;margin-top:2px}
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.75}50%{transform:scale(1.16);opacity:1}}
@@ -97,20 +100,20 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 /* ---- ADMIN VIEW ---- */
 .scroll{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
 .card{background:var(--card);border-radius:13px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
-.card-title{font-size:.9rem;font-weight:700;color:var(--red);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.card-title{font-size:.9rem;font-weight:700;color:var(--orange-ink);margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .field{margin-bottom:11px}
 .field label{display:block;font-size:.78rem;color:var(--text2);margin-bottom:4px;font-weight:500}
 .field input,.field select{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:.95rem;font-family:inherit;color:var(--text);background:#fff;transition:border-color .2s}
-.field input:focus,.field select:focus{outline:none;border-color:var(--red)}
+.field input:focus,.field select:focus{outline:none;border-color:var(--orange)}
 .field-chk{display:flex;align-items:center;gap:9px;margin-bottom:11px}
-.field-chk input{width:19px;height:19px;flex-shrink:0;accent-color:var(--red)}
+.field-chk input{width:19px;height:19px;flex-shrink:0;accent-color:var(--orange)}
 .field-chk label{font-size:.85rem;font-weight:600;color:var(--text)}
 .hint{font-size:.72rem;color:var(--text2);line-height:1.5;margin-top:-5px;margin-bottom:11px}
 .btn{padding:10px 16px;border:none;border-radius:9px;font-size:.88rem;font-weight:700;cursor:pointer;transition:opacity .15s}
 .btn:active{opacity:.8}
 .btn-blue{background:var(--blue);color:#fff}
 .btn-green{background:var(--green);color:#fff}
-.btn-red{background:var(--red);color:#fff}
+.btn-orange{background:var(--orange);color:var(--text)}
 .btn-gray{background:#E5E7EB;color:var(--text)}
 .btn-sm{padding:6px 11px;font-size:.78rem}
 .btn-full{width:100%;margin-top:10px}
@@ -126,7 +129,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 
 /* ---- PUNCH LOG ---- */
 .plog{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
-.plog-item{font-size:.78rem;padding:8px 10px;background:#F8FAFC;border-radius:7px;border-left:3px solid var(--red)}
+.plog-item{font-size:.78rem;padding:8px 10px;background:#F8FAFC;border-radius:7px;border-left:3px solid var(--orange)}
 .plog-name{font-weight:700}
 .plog-time{color:var(--text2)}
 
@@ -147,8 +150,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .modal-btns .btn{flex:1}
 
 /* ---- LOADING ---- */
-#loading{display:flex;position:fixed;inset:0;background:var(--red);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:18px;color:#fff}
-.spinner{width:48px;height:48px;border:4px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite}
+#loading{display:flex;position:fixed;inset:0;background:var(--orange);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:18px;color:var(--text)}
+.spinner{width:48px;height:48px;border:4px solid rgba(0,0,0,.18);border-top-color:var(--text);border-radius:50%;animation:spin .75s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 #load-msg{font-size:.9rem;opacity:.85;text-align:center;padding:0 24px;line-height:1.6}
 
@@ -267,7 +270,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         <label for="cfgGesture">Confirmar com gesto 👍 (polegar para cima)</label>
       </div>
       <p class="hint">Se desligado, a confirmação é feita apenas pelo botão na tela.</p>
-      <button class="btn btn-red btn-full" onclick="saveSettings()">Salvar configurações</button>
+      <button class="btn btn-orange btn-full" onclick="saveSettings()">Salvar configurações</button>
     </div>
 
     <!-- Employees -->
@@ -945,7 +948,7 @@ function renderUserList() {
         <div class="uname">${esc(u.name)}</div>
         <div class="uphotos">${u.descs.length} foto(s)</div>
       </div>
-      <button class="btn btn-red btn-sm" onclick="delUser(${u.id})">Remover</button>
+      <button class="btn btn-orange btn-sm" onclick="delUser(${u.id})">Remover</button>
     </div>`).join('');
 }
 
