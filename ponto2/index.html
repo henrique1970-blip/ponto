@@ -336,46 +336,23 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 'use strict';
 
 // ─── APPS SCRIPT CODE ──────────────────────────────────────────────────────
-const APPS_SCRIPT = `function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName('Saidas');
-    if (!sheet) {
-      sheet = ss.insertSheet('Saidas');
-      sheet.appendRow(['ID','Nome','Tipo','Data','Hora','Local','Confirmacao','Latitude','Longitude']);
-      sheet.setFrozenRows(1);
-    }
-    (data.records || []).forEach(r => {
-      const dt = new Date(r.timestamp);
-      const tz = 'America/Sao_Paulo';
-      sheet.appendRow([
-        r.id,
-        r.userName,
-        'Saída',
-        Utilities.formatDate(dt, tz, 'dd/MM/yyyy'),
-        Utilities.formatDate(dt, tz, 'HH:mm:ss'),
-        r.locationName,
-        r.method === 'gesto' ? 'Gesto 👍' : 'Botão',
-        r.lat != null ? r.lat : '',
-        r.lon != null ? r.lon : ''
-      ]);
-    });
-    return ContentService
-      .createTextOutput(JSON.stringify({ok:true, saved:data.records.length}))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch(err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ok:false, error:err.message}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-function doGet() {
-  return ContentService.createTextOutput('Ponto Saida OK')
-    .setMimeType(ContentService.MimeType.TEXT);
-}`;
+// O código vive em apps-script.gs — uma cópia só, para o que a planilha roda e
+// o que esta tela mostra nunca divergirem. O Service Worker (network-first)
+// guarda o arquivo no primeiro acesso online, então ele continua disponível
+// offline depois disso.
+let APPS_SCRIPT = '';
 
-document.getElementById('scriptPre').textContent = APPS_SCRIPT;
+(async () => {
+  const pre = document.getElementById('scriptPre');
+  try {
+    const r = await fetch('apps-script.gs');
+    if (!r.ok) throw new Error(r.status);
+    APPS_SCRIPT = await r.text();
+    pre.textContent = APPS_SCRIPT;
+  } catch (_) {
+    pre.textContent = 'Abra o app com internet uma vez para carregar o código.';
+  }
+})();
 
 // ─── INDEXEDDB ─────────────────────────────────────────────────────────────
 let _db;
@@ -409,6 +386,10 @@ const setCfg = (k,v) => dbPut('cfg',{k,v});
 const MODELS       = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
 const TASKS_VISION = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
 const GESTURE_MODEL= 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
+
+// Webhook padrão: o aparelho já sai sincronizando, sem passar pela tela de admin.
+// O campo "URL do Webhook" continua valendo — se preenchido, ele tem prioridade.
+const WEBHOOK_PADRAO = 'https://script.google.com/macros/s/AKfycbyletoQ95lj2dy-RqZ3UtHFFWls8rUOya_Ad-6DPMH0STyJAxm2t_zFBnqOF8RgNA9oKA/exec';
 
 const CONFIRM_TIMEOUT = 20000;  // janela para confirmar antes de voltar a escanear
 const DONE_DURATION   =  3200;  // tempo da tela de sucesso
@@ -841,7 +822,7 @@ async function confirmPunch(method) {
 
 // ─── SYNC ────────────────────────────────────────────────────────────────────
 async function syncNow(silent=false) {
-  const url = await getCfg('webhook','');
+  const url = await getCfg('webhook', WEBHOOK_PADRAO);
   if (!url) { if(!silent) toast('Configure a URL do webhook.'); return; }
   if (!navigator.onLine) { if(!silent) toast('Sem conexão.'); return; }
 
@@ -885,7 +866,7 @@ async function goAdmin() {
   adminOpen = true;
 
   document.getElementById('cfgLoc').value     = await getCfg('loc','');
-  document.getElementById('cfgUrl').value     = await getCfg('webhook','');
+  document.getElementById('cfgUrl').value     = await getCfg('webhook', WEBHOOK_PADRAO);
   document.getElementById('cfgPin').value     = '';
   document.getElementById('cfgMinH').value    = minHours;
   document.getElementById('cfgWake').checked  = wakeWanted;
@@ -1119,6 +1100,7 @@ function esc(s) {
 }
 
 function copyScript() {
+  if (!APPS_SCRIPT) { toast('Código ainda não carregado — abra o app com internet.'); return; }
   navigator.clipboard.writeText(APPS_SCRIPT)
     .then(()=>toast('Código copiado para a área de transferência! ✓'))
     .catch(()=>toast('Selecione e copie o código manualmente.'));
