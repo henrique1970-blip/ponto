@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Ponto Saída</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#C62828">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --red:#C62828;--red2:#E53935;--green:#2E7D32;--green2:#43A047;--blue:#1565C0;
+  --bg:#F0F4F8;--card:#FFF;--text:#1A1A2E;--text2:#6B7280;
+  --border:#E5E7EB;--shadow:0 1px 4px rgba(0,0,0,.12);
+}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:16px}
+
+/* ---- VIEWS ---- */
+.view{display:none;height:100vh;flex-direction:column}
+.view.active{display:flex}
+
+/* ---- HEADER ---- */
+.hdr{background:var(--red);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:50px}
+.hdr h1{font-size:1rem;font-weight:700;flex:1;letter-spacing:.3px}
+.hdr-btn{background:rgba(255,255,255,.18);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-size:.8rem;font-weight:600;cursor:pointer}
+.hdr-btn:active{background:rgba(255,255,255,.3)}
+
+/* ---- STATUS BAR ---- */
+.sbar{background:#FEF2F2;border-bottom:1px solid #FECACA;padding:5px 14px;font-size:.75rem;color:#B91C1C;display:flex;align-items:center;gap:7px;flex-shrink:0}
+.dot{width:8px;height:8px;border-radius:50%;background:#16A34A;flex-shrink:0}
+.dot.off{background:#DC2626}
+.dot.sync{background:#EA580C;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.sbar-chip{font-weight:600}
+.sbar-right{margin-left:auto;font-weight:600;color:#B45309}
+
+/* ---- CAMERA AREA ---- */
+.cam-wrap{position:relative;flex:1;background:#0F172A;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none}
+.face-ring{position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);width:min(190px,58vw);height:min(190px,58vw);border-radius:50%;border:2.5px dashed rgba(255,255,255,.45);pointer-events:none;transition:border-color .3s}
+.face-ring.detected{border-color:#4ADE80;border-style:solid}
+.face-ring.hidden{display:none}
+.name-badge{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.72);color:#fff;padding:7px 20px;border-radius:20px;font-size:.95rem;font-weight:700;white-space:nowrap;display:none;backdrop-filter:blur(4px)}
+.cam-msg{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;padding:5px 14px;border-radius:12px;font-size:.78rem;white-space:nowrap;pointer-events:none}
+
+/* ---- CONFIRM OVERLAY (sobre a câmera) ---- */
+.confirm-ov{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  background:linear-gradient(180deg,rgba(15,23,42,.55),rgba(15,23,42,.82));backdrop-filter:blur(2px);text-align:center;padding:16px}
+.confirm-ov.on{display:flex}
+.co-hi{font-size:.8rem;color:#FCA5A5;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+.co-name{font-size:1.9rem;font-weight:800;color:#fff;line-height:1.15;max-width:92%;word-break:break-word}
+.co-thumb{font-size:3.2rem;line-height:1;animation:pulse 1.4s ease-in-out infinite;margin-top:2px}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.75}50%{transform:scale(1.16);opacity:1}}
+.co-hint{font-size:.9rem;color:#E2E8F0;font-weight:600}
+.co-hint small{display:block;font-size:.75rem;color:#94A3B8;font-weight:500;margin-top:3px}
+.co-timer{font-size:.75rem;color:#94A3B8;font-variant-numeric:tabular-nums}
+.gesture-off{color:#FCD34D;font-size:.72rem;font-weight:600}
+
+/* ---- SUCCESS OVERLAY ---- */
+.done-ov{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  background:rgba(22,101,52,.93);text-align:center;padding:16px}
+.done-ov.on{display:flex}
+.done-check{font-size:4rem;line-height:1;animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}
+.done-name{font-size:1.5rem;font-weight:800;color:#fff;max-width:92%;word-break:break-word}
+.done-time{font-size:1.05rem;color:#DCFCE7;font-weight:700;font-variant-numeric:tabular-nums}
+.done-sub{font-size:.8rem;color:#BBF7D0}
+
+/* ---- PUNCH PANEL ---- */
+.punch-panel{background:#fff;padding:14px 16px;flex-shrink:0;box-shadow:0 -3px 10px rgba(0,0,0,.1)}
+.punch-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px}
+.clock{font-size:2rem;font-weight:800;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--text)}
+.date-txt{font-size:.78rem;color:var(--text2);text-align:right;line-height:1.5}
+.btn-punch{width:100%;padding:17px;font-size:1.1rem;font-weight:800;border:none;border-radius:13px;cursor:pointer;
+  transition:opacity .15s,transform .1s;background:#94A3B8;color:#fff;letter-spacing:.2px}
+.btn-punch:disabled{opacity:.45;cursor:not-allowed}
+.btn-punch.ready{background:var(--green);animation:glow 1.6s ease-in-out infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(46,125,50,.45)}50%{box-shadow:0 0 0 9px rgba(46,125,50,0)}}
+.btn-punch:not(:disabled):active{opacity:.85;transform:scale(.98)}
+.btn-cancel{width:100%;margin-top:8px;padding:10px;font-size:.85rem;font-weight:700;border:none;border-radius:11px;
+  background:#E5E7EB;color:var(--text2);cursor:pointer;display:none}
+.btn-cancel.on{display:block}
+
+/* ---- TOAST ---- */
+#toast{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:#1E293B;color:#fff;padding:10px 22px;border-radius:10px;font-size:.88rem;z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center}
+#toast.on{opacity:1}
+
+/* ---- ADMIN VIEW ---- */
+.scroll{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
+.card{background:var(--card);border-radius:13px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
+.card-title{font-size:.9rem;font-weight:700;color:var(--red);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.field{margin-bottom:11px}
+.field label{display:block;font-size:.78rem;color:var(--text2);margin-bottom:4px;font-weight:500}
+.field input,.field select{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:.95rem;font-family:inherit;color:var(--text);background:#fff;transition:border-color .2s}
+.field input:focus,.field select:focus{outline:none;border-color:var(--red)}
+.field-chk{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.field-chk input{width:19px;height:19px;flex-shrink:0;accent-color:var(--red)}
+.field-chk label{font-size:.85rem;font-weight:600;color:var(--text)}
+.hint{font-size:.72rem;color:var(--text2);line-height:1.5;margin-top:-5px;margin-bottom:11px}
+.btn{padding:10px 16px;border:none;border-radius:9px;font-size:.88rem;font-weight:700;cursor:pointer;transition:opacity .15s}
+.btn:active{opacity:.8}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-gray{background:#E5E7EB;color:var(--text)}
+.btn-sm{padding:6px 11px;font-size:.78rem}
+.btn-full{width:100%;margin-top:10px}
+
+/* ---- USER LIST ---- */
+.user-list{display:flex;flex-direction:column;gap:8px}
+.user-item{display:flex;align-items:center;gap:10px;padding:9px;background:#F8FAFC;border-radius:9px}
+.uavatar{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#E2E8F0;flex-shrink:0}
+.uinfo{flex:1;min-width:0}
+.uname{font-weight:700;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uphotos{font-size:.75rem;color:var(--text2)}
+.empty-msg{font-size:.85rem;color:var(--text2);text-align:center;padding:12px 0}
+
+/* ---- PUNCH LOG ---- */
+.plog{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.plog-item{font-size:.78rem;padding:8px 10px;background:#F8FAFC;border-radius:7px;border-left:3px solid var(--red)}
+.plog-name{font-weight:700}
+.plog-time{color:var(--text2)}
+
+/* ---- MODAL ---- */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:flex-end;justify-content:center;padding:0}
+.modal-bg.on{display:flex}
+.modal{background:#fff;border-radius:20px 20px 0 0;padding:20px 18px 30px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto}
+@media(min-height:700px){
+  .modal-bg{align-items:center;padding:16px}
+  .modal{border-radius:18px;max-height:88vh}
+}
+.modal-title{font-size:1.05rem;font-weight:700;margin-bottom:14px}
+.reg-video{width:100%;border-radius:10px;background:#0F172A;aspect-ratio:4/3;object-fit:cover;margin-bottom:10px;transform:scaleX(-1)}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:40px}
+.thumbs img{width:56px;height:56px;border-radius:7px;object-fit:cover;border:2.5px solid #D1FAE5}
+.reg-status{font-size:.83rem;color:var(--text2);margin-bottom:10px;min-height:18px}
+.modal-btns{display:flex;gap:8px}
+.modal-btns .btn{flex:1}
+
+/* ---- LOADING ---- */
+#loading{display:flex;position:fixed;inset:0;background:var(--red);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:18px;color:#fff}
+.spinner{width:48px;height:48px;border:4px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#load-msg{font-size:.9rem;opacity:.85;text-align:center;padding:0 24px;line-height:1.6}
+
+/* ---- SCRIPT BLOCK ---- */
+pre.script{font-size:.68rem;background:#F1F5F9;border-radius:8px;padding:10px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin-top:8px;line-height:1.5}
+details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:600;margin-top:8px}
+
+/* ---- RESPONSIVE DESKTOP ---- */
+@media(min-width:600px){
+  .punch-panel{padding:16px 20px}
+  .clock{font-size:2.4rem}
+  .modal{max-width:440px}
+  .card{border-radius:14px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING SCREEN -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div id="load-msg">Carregando modelos de reconhecimento facial…<br><small>Necessário apenas no primeiro acesso</small></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ========== VIEW: PUNCH (SAÍDA) ========== -->
+<div class="view active" id="vPunch">
+  <div class="hdr">
+    <h1>🔴 Registro de Saída</h1>
+    <button class="hdr-btn" onclick="goAdmin()">Admin</button>
+  </div>
+  <div class="sbar">
+    <div class="dot" id="netDot"></div>
+    <span id="netLabel">Online</span>
+    <span class="sbar-chip" id="wakeLabel"></span>
+    <span class="sbar-right" id="pendingLabel"></span>
+  </div>
+  <div class="cam-wrap">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
+    <div class="face-ring" id="faceRing"></div>
+    <div class="cam-msg" id="camMsg">Posicione o rosto na câmera</div>
+    <div class="name-badge" id="nameBadge"></div>
+
+    <!-- Passo de confirmação -->
+    <div class="confirm-ov" id="confirmOv">
+      <div class="co-hi">Confirmar saída</div>
+      <div class="co-name" id="coName"></div>
+      <div class="co-thumb">👍</div>
+      <div class="co-hint" id="coHint">
+        Mostre o polegar para cima
+        <small>ou toque no botão verde abaixo</small>
+      </div>
+      <div class="co-timer" id="coTimer"></div>
+    </div>
+
+    <!-- Sucesso -->
+    <div class="done-ov" id="doneOv">
+      <div class="done-check">✅</div>
+      <div class="done-name" id="doneName"></div>
+      <div class="done-time" id="doneTime"></div>
+      <div class="done-sub" id="doneSub">Saída registrada</div>
+    </div>
+  </div>
+  <div class="punch-panel">
+    <div class="punch-row">
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="date-txt" id="dateTxt"></div>
+    </div>
+    <button class="btn-punch" id="btnPunch" disabled onclick="confirmPunch('botao')">
+      Aguardando rosto…
+    </button>
+    <button class="btn-cancel" id="btnCancel" onclick="cancelConfirm()">Cancelar</button>
+  </div>
+</div>
+
+<!-- ========== VIEW: ADMIN ========== -->
+<div class="view" id="vAdmin">
+  <div class="hdr">
+    <button class="hdr-btn" onclick="goBack()" style="padding:6px 10px">← Voltar</button>
+    <h1>Administração</h1>
+  </div>
+  <div class="scroll">
+
+    <!-- Settings -->
+    <div class="card">
+      <div class="card-title">⚙️ Configurações</div>
+      <div class="field">
+        <label>Nome deste local (fixo)</label>
+        <input id="cfgLoc" type="text" placeholder="Ex: Escritório SP, Obra João…">
+      </div>
+      <div class="field">
+        <label>URL do Webhook (Google Apps Script)</label>
+        <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec">
+      </div>
+      <div class="field">
+        <label>PIN de administrador (mín. 4 dígitos)</label>
+        <input id="cfgPin" type="password" placeholder="Deixe em branco para não alterar">
+      </div>
+      <div class="field-chk">
+        <input id="cfgWake" type="checkbox" checked>
+        <label for="cfgWake">Manter a tela sempre ligada</label>
+      </div>
+      <p class="hint">Impede que o celular apague a tela enquanto o app estiver aberto (modo totem).
+        Mantenha o aparelho na tomada — a tela ligada consome bateria.</p>
+      <div class="field-chk">
+        <input id="cfgGesture" type="checkbox" checked>
+        <label for="cfgGesture">Confirmar com gesto 👍 (polegar para cima)</label>
+      </div>
+      <p class="hint">Se desligado, a confirmação é feita apenas pelo botão na tela.</p>
+      <button class="btn btn-red btn-full" onclick="saveSettings()">Salvar configurações</button>
+    </div>
+
+    <!-- Employees -->
+    <div class="card">
+      <div class="card-title">👥 Funcionários cadastrados</div>
+      <div class="user-list" id="userList"><p class="empty-msg">Nenhum funcionário cadastrado.</p></div>
+      <button class="btn btn-green btn-full" onclick="openReg()">+ Cadastrar funcionário</button>
+    </div>
+
+    <!-- Pending punches -->
+    <div class="card">
+      <div class="card-title">📤 Saídas pendentes de envio</div>
+      <div class="plog" id="plogList"><p class="empty-msg">Nenhum registro pendente.</p></div>
+      <button class="btn btn-blue btn-full" onclick="syncNow(false)">Sincronizar com Google Sheets</button>
+    </div>
+
+    <!-- Instructions -->
+    <div class="card">
+      <div class="card-title">📋 Como configurar o Google Sheets</div>
+      <p style="font-size:.8rem;color:#555;line-height:1.65">
+        1. Crie uma planilha no Google Sheets.<br>
+        2. Vá em <b>Extensões → Apps Script</b>.<br>
+        3. Apague o conteúdo e cole o código abaixo.<br>
+        4. Clique em <b>Implantar → Nova implantação</b> → tipo "App da Web".<br>
+        5. Em "Executar como": sua conta. Em "Quem pode acessar": <b>Qualquer pessoa</b>.<br>
+        6. Copie a URL gerada e cole no campo de Webhook acima.
+      </p>
+      <details>
+        <summary>Ver código do Apps Script</summary>
+        <pre class="script" id="scriptPre"></pre>
+        <button class="btn btn-blue btn-sm" style="margin-top:6px" onclick="copyScript()">Copiar código</button>
+      </details>
+    </div>
+
+  </div><!-- /scroll -->
+</div>
+
+<!-- ========== MODAL: Register Face ========== -->
+<div class="modal-bg" id="modalReg">
+  <div class="modal">
+    <div class="modal-title">Cadastrar funcionário</div>
+    <div class="field">
+      <label>Nome completo</label>
+      <input id="regName" type="text" placeholder="Ex: Maria Silva" autocomplete="off">
+    </div>
+    <video id="regVideo" class="reg-video" autoplay muted playsinline></video>
+    <div class="thumbs" id="thumbs"></div>
+    <div class="reg-status" id="regStatus">Tire 3 fotos para melhor precisão (mínimo 1).</div>
+    <div class="modal-btns">
+      <button class="btn btn-green" id="btnCapture" onclick="capture()">📸 Capturar</button>
+      <button class="btn btn-blue" id="btnSave" onclick="saveUser()" disabled>✓ Salvar</button>
+      <button class="btn btn-gray" onclick="closeReg()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- face-api.js -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script>
+'use strict';
+
+// ─── APPS SCRIPT CODE ──────────────────────────────────────────────────────
+const APPS_SCRIPT = `function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Saidas');
+    if (!sheet) {
+      sheet = ss.insertSheet('Saidas');
+      sheet.appendRow(['ID','Nome','Tipo','Data','Hora','Local','Confirmacao','Latitude','Longitude']);
+      sheet.setFrozenRows(1);
+    }
+    (data.records || []).forEach(r => {
+      const dt = new Date(r.timestamp);
+      const tz = 'America/Sao_Paulo';
+      sheet.appendRow([
+        r.id,
+        r.userName,
+        'Saída',
+        Utilities.formatDate(dt, tz, 'dd/MM/yyyy'),
+        Utilities.formatDate(dt, tz, 'HH:mm:ss'),
+        r.locationName,
+        r.method === 'gesto' ? 'Gesto 👍' : 'Botão',
+        r.lat != null ? r.lat : '',
+        r.lon != null ? r.lon : ''
+      ]);
+    });
+    return ContentService
+      .createTextOutput(JSON.stringify({ok:true, saved:data.records.length}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ok:false, error:err.message}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+function doGet() {
+  return ContentService.createTextOutput('Ponto Saida OK')
+    .setMimeType(ContentService.MimeType.TEXT);
+}`;
+
+document.getElementById('scriptPre').textContent = APPS_SCRIPT;
+
+// ─── INDEXEDDB ─────────────────────────────────────────────────────────────
+let _db;
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('PontoSaida', 1);
+    req.onerror = () => rej(req.error);
+    req.onsuccess = () => { _db = req.result; res(_db); };
+    req.onupgradeneeded = ev => {
+      const d = ev.target.result;
+      if (!d.objectStoreNames.contains('users'))
+        d.createObjectStore('users', {keyPath:'id', autoIncrement:true});
+      if (!d.objectStoreNames.contains('punches')) {
+        const ps = d.createObjectStore('punches', {keyPath:'id', autoIncrement:true});
+        ps.createIndex('synced','synced',{unique:false});
+      }
+      if (!d.objectStoreNames.contains('cfg'))
+        d.createObjectStore('cfg', {keyPath:'k'});
+    };
+  });
+}
+const tx = (store, mode='readonly') => _db.transaction(store, mode).objectStore(store);
+const dbGet  = (s,k)  => new Promise((r,j) => { const q=tx(s).get(k); q.onsuccess=()=>r(q.result); q.onerror=()=>j(q.error); });
+const dbPut  = (s,v)  => new Promise((r,j) => { const q=tx(s,'readwrite').put(v); q.onsuccess=()=>r(q.result); q.onerror=()=>j(q.error); });
+const dbDel  = (s,k)  => new Promise((r,j) => { const q=tx(s,'readwrite').delete(k); q.onsuccess=()=>r(); q.onerror=()=>j(q.error); });
+const dbAll  = s      => new Promise((r,j) => { const q=tx(s).getAll(); q.onsuccess=()=>r(q.result); q.onerror=()=>j(q.error); });
+const getCfg = async (k,def='') => { const r=await dbGet('cfg',k); return r!==undefined ? r.v : def; };
+const setCfg = (k,v) => dbPut('cfg',{k,v});
+
+// ─── CONSTANTES ─────────────────────────────────────────────────────────────
+const MODELS       = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+const TASKS_VISION = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const GESTURE_MODEL= 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
+
+const CONFIRM_TIMEOUT = 20000;  // janela para confirmar antes de voltar a escanear
+const DONE_DURATION   =  3200;  // tempo da tela de sucesso
+const RECENT_WINDOW   = 60000;  // não repropõe saída ao mesmo rosto dentro de 1 min
+const THUMB_SCORE     =  0.62;  // confiança mínima do gesto
+const THUMB_FRAMES    =     4;  // leituras consecutivas exigidas (anti-falso-positivo)
+const GESTURE_INTERVAL=   100;  // ms entre inferências de gesto (~10 fps)
+
+// ─── STATE ──────────────────────────────────────────────────────────────────
+let users     = [];
+let matcher   = null;
+let curMatch  = null;          // {name, distance}
+let mode      = 'scanning';    // 'scanning' | 'confirming' | 'done' | 'idle'
+let regStream = null;
+let regDescs  = [];
+let regThumbs = [];
+let adminOpen = false;
+
+let gestureRec   = null;
+let gestureOn    = true;
+let thumbStreak  = 0;
+let lastGestureTs= 0;
+let confirmUntil = 0;
+let wakeLock     = null;
+let wakeWanted   = true;
+
+// ─── INIT ───────────────────────────────────────────────────────────────────
+async function init() {
+  await openDB();
+  wakeWanted = await getCfg('wake', true);
+  gestureOn  = await getCfg('gesture', true);
+
+  setLoadMsg('Carregando modelo de detecção…');
+  try {
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODELS),
+      faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODELS),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODELS),
+    ]);
+  } catch(e) {
+    setLoadMsg('❌ Erro ao carregar modelos.\nVerifique a conexão e recarregue a página.');
+    return;
+  }
+
+  // Gestos: opcional. Se falhar, o app segue funcionando só com o botão.
+  if (gestureOn) {
+    setLoadMsg('Carregando reconhecimento de gestos…');
+    await initGestures();
+  }
+
+  document.getElementById('loading').style.display = 'none';
+  await loadUsers();
+  startClock();
+  watchNetwork();
+  setupWakeLock();
+  await startCamera();
+}
+function setLoadMsg(m) { document.getElementById('load-msg').innerHTML = m.replace(/\n/g,'<br>'); }
+
+// ─── WAKE LOCK (tela sempre ligada) ─────────────────────────────────────────
+async function acquireWakeLock() {
+  if (!wakeWanted || !('wakeLock' in navigator) || wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; updWakeLabel(); });
+  } catch(_) { wakeLock = null; }
+  updWakeLabel();
+}
+async function releaseWakeLock() {
+  if (!wakeLock) return;
+  try { await wakeLock.release(); } catch(_) {}
+  wakeLock = null;
+  updWakeLabel();
+}
+function updWakeLabel() {
+  const el = document.getElementById('wakeLabel');
+  if (!wakeWanted)                 { el.textContent = ''; return; }
+  if (!('wakeLock' in navigator))  { el.textContent = '· tela: não suportado'; return; }
+  el.textContent = wakeLock ? '· 🔆 tela ativa' : '· tela: inativa';
+}
+function setupWakeLock() {
+  acquireWakeLock();
+  // O sistema libera o lock ao trocar de app / bloquear — reobtém ao voltar.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') acquireWakeLock();
+  });
+  // Alguns navegadores só concedem o lock após interação do usuário.
+  const retry = () => acquireWakeLock();
+  document.addEventListener('click', retry);
+  document.addEventListener('touchstart', retry, {passive:true});
+  updWakeLabel();
+}
+
+// ─── GESTOS (MediaPipe Tasks Vision) ────────────────────────────────────────
+async function initGestures() {
+  try {
+    const vision  = await import(`${TASKS_VISION}/vision_bundle.mjs`);
+    const fileset = await vision.FilesetResolver.forVisionTasks(`${TASKS_VISION}/wasm`);
+    const make    = delegate => vision.GestureRecognizer.createFromOptions(fileset, {
+      baseOptions : { modelAssetPath: GESTURE_MODEL, delegate },
+      runningMode : 'VIDEO',
+      numHands    : 1,
+    });
+    try       { gestureRec = await make('GPU'); }
+    catch(_)  { gestureRec = await make('CPU'); }   // fallback p/ aparelhos sem WebGL
+  } catch(e) {
+    gestureRec = null;                              // degrada para confirmação por botão
+  }
+}
+
+// ─── CLOCK ──────────────────────────────────────────────────────────────────
+function startClock() {
+  const clock   = document.getElementById('clock');
+  const dateTxt = document.getElementById('dateTxt');
+  function tick() {
+    const n = new Date();
+    clock.textContent = n.toLocaleTimeString('pt-BR');
+    dateTxt.innerHTML = n.toLocaleDateString('pt-BR',{weekday:'long'})+
+      '<br>'+n.toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  }
+  tick(); setInterval(tick,1000);
+}
+
+// ─── NETWORK ────────────────────────────────────────────────────────────────
+function watchNetwork() {
+  const dot   = document.getElementById('netDot');
+  const label = document.getElementById('netLabel');
+  function upd() {
+    const on = navigator.onLine;
+    dot.className     = 'dot'+(on?'':' off');
+    label.textContent = on ? 'Online' : 'Sem conexão';
+    if (on) syncNow(true);
+  }
+  upd();
+  window.addEventListener('online',  upd);
+  window.addEventListener('offline', upd);
+  setInterval(updPending, 8000);
+  updPending();
+}
+async function updPending() {
+  const all = await dbAll('punches');
+  const n   = all.filter(p=>!p.synced).length;
+  document.getElementById('pendingLabel').textContent = n>0 ? `⚠ ${n} pendente${n>1?'s':''}` : '';
+}
+
+// ─── CAMERA ─────────────────────────────────────────────────────────────────
+const video   = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} },
+      audio:false
+    });
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+      overlay.width  = video.videoWidth;
+      overlay.height = video.videoHeight;
+      startLoop();
+    };
+  } catch(e) {
+    toast('Câmera indisponível: '+e.message, 6000);
+    document.getElementById('camMsg').textContent = '⚠ Câmera bloqueada';
+  }
+}
+
+// ─── LOOP PRINCIPAL ─────────────────────────────────────────────────────────
+// scanning  → detecta e reconhece o rosto (~600ms)
+// confirming→ procura o gesto 👍 (a cada frame) e conta o tempo restante
+const OPTS = new faceapi.TinyFaceDetectorOptions({inputSize:320, scoreThreshold:0.5});
+let lastDt = 0;
+let busy   = false;
+
+function startLoop() { requestAnimationFrame(loop); }
+
+function loop() {
+  requestAnimationFrame(loop);
+  if (adminOpen || video.readyState < 2) return;
+
+  if (mode === 'scanning') {
+    const now = Date.now();
+    if (!busy && now - lastDt >= 600) {
+      lastDt = now;
+      busy = true;
+      detect().finally(() => { busy = false; });
+    }
+  } else if (mode === 'confirming') {
+    tickConfirm();
+  }
+}
+
+// ─── SCANNING ───────────────────────────────────────────────────────────────
+async function detect() {
+  const dets = await faceapi
+    .detectAllFaces(video, OPTS)
+    .withFaceLandmarks(true)
+    .withFaceDescriptors();
+
+  if (mode !== 'scanning') return;   // estado pode ter mudado durante o await
+
+  const ctx   = overlay.getContext('2d');
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+  const ring  = document.getElementById('faceRing');
+  const msg   = document.getElementById('camMsg');
+  const badge = document.getElementById('nameBadge');
+
+  if (!dets.length) {
+    curMatch = null;
+    badge.style.display = 'none';
+    ring.classList.remove('detected');
+    msg.textContent = 'Posicione o rosto na câmera';
+    setIdleBtn();
+    return;
+  }
+
+  const best = dets[0];
+  const b    = best.detection.box;
+  ctx.strokeStyle = '#4ADE80';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(b.x, b.y, b.width, b.height);
+
+  ring.classList.add('detected');
+  msg.textContent = '';
+
+  if (!matcher) {
+    msg.textContent = 'Nenhum funcionário cadastrado';
+    badge.style.display = 'none';
+    setIdleBtn('Cadastre funcionários no Admin');
+    return;
+  }
+
+  const m = matcher.findBestMatch(best.descriptor);
+  if (m.label !== 'unknown' && m.distance < 0.55) {
+    const recent = await lastPunchOf(m.label);
+    if (recent && Date.now() - new Date(recent.timestamp).getTime() < RECENT_WINDOW) {
+      // Evita propor a mesma saída de novo enquanto a pessoa ainda está na frente da câmera.
+      badge.textContent   = m.label;
+      badge.style.display = 'block';
+      const hh = new Date(recent.timestamp).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      setIdleBtn(`Saída já registrada às ${hh}`);
+      return;
+    }
+    enterConfirm({name: m.label, distance: m.distance});
+    return;
+  }
+
+  curMatch = null;
+  badge.style.display = 'none';
+  setIdleBtn('Rosto não reconhecido');
+}
+
+async function lastPunchOf(name) {
+  const all  = await dbAll('punches');
+  const mine = all.filter(p => p.userName === name);
+  return mine[mine.length - 1];
+}
+
+// ─── CONFIRMAÇÃO ────────────────────────────────────────────────────────────
+function enterConfirm(match) {
+  curMatch     = match;
+  mode         = 'confirming';
+  thumbStreak  = 0;
+  confirmUntil = Date.now() + CONFIRM_TIMEOUT;
+
+  document.getElementById('faceRing').classList.add('hidden');
+  document.getElementById('nameBadge').style.display = 'none';
+  document.getElementById('camMsg').textContent = '';
+  document.getElementById('overlay').getContext('2d').clearRect(0,0,overlay.width,overlay.height);
+
+  document.getElementById('coName').textContent = match.name;
+
+  const canGesture = gestureOn && gestureRec;
+  document.getElementById('coHint').innerHTML = canGesture
+    ? 'Mostre o polegar para cima<br><small>ou toque no botão verde abaixo</small>'
+    : '<span class="gesture-off">Confirme no botão verde abaixo</span>';
+
+  document.getElementById('confirmOv').classList.add('on');
+
+  const btn = document.getElementById('btnPunch');
+  btn.disabled  = false;
+  btn.className = 'btn-punch ready';
+  btn.textContent = '✔ CONFIRMAR SAÍDA';
+  document.getElementById('btnCancel').classList.add('on');
+}
+
+function tickConfirm() {
+  const left = confirmUntil - Date.now();
+  if (left <= 0) { cancelConfirm(); return; }
+  document.getElementById('coTimer').textContent = `expira em ${Math.ceil(left/1000)}s`;
+
+  if (!gestureOn || !gestureRec) return;
+
+  // Roda a ~10 fps em vez de a cada frame: o gesto é sustentado, não instantâneo,
+  // e inferir 60x/s aqueceria o aparelho à toa (a tela já fica ligada o tempo todo).
+  // recognizeForVideo também exige timestamps estritamente crescentes.
+  const ts = performance.now();
+  if (ts - lastGestureTs < GESTURE_INTERVAL) return;
+  lastGestureTs = ts;
+
+  let res;
+  try { res = gestureRec.recognizeForVideo(video, ts); }
+  catch(_) { return; }
+
+  const g = res && res.gestures && res.gestures[0] && res.gestures[0][0];
+  if (g && g.categoryName === 'Thumb_Up' && g.score >= THUMB_SCORE) {
+    thumbStreak++;
+    if (thumbStreak >= THUMB_FRAMES) confirmPunch('gesto');
+  } else {
+    thumbStreak = 0;
+  }
+}
+
+function cancelConfirm() {
+  if (mode !== 'confirming') return;
+  exitConfirmUI();
+  curMatch = null;
+  mode     = 'scanning';
+  setIdleBtn();
+}
+
+function exitConfirmUI() {
+  document.getElementById('confirmOv').classList.remove('on');
+  document.getElementById('btnCancel').classList.remove('on');
+  document.getElementById('faceRing').classList.remove('hidden');
+  document.getElementById('coTimer').textContent = '';
+  thumbStreak = 0;
+}
+
+function setIdleBtn(msg='Aguardando rosto…') {
+  const btn = document.getElementById('btnPunch');
+  btn.disabled    = true;
+  btn.className   = 'btn-punch';
+  btn.textContent = msg;
+}
+
+// ─── REGISTRO DA SAÍDA ──────────────────────────────────────────────────────
+async function confirmPunch(method) {
+  if (mode !== 'confirming' || !curMatch) return;
+
+  const match = curMatch;
+  mode = 'done';                       // trava o loop imediatamente (evita duplo registro)
+  exitConfirmUI();
+
+  const btn = document.getElementById('btnPunch');
+  btn.disabled    = true;
+  btn.className   = 'btn-punch';
+  btn.textContent = 'Registrando…';
+
+  const locNm = await getCfg('loc','Local não configurado');
+
+  let lat=null, lon=null;
+  try {
+    const pos = await new Promise((r,j) =>
+      navigator.geolocation.getCurrentPosition(r, j, {timeout:3500, enableHighAccuracy:false})
+    );
+    lat = +pos.coords.latitude.toFixed(6);
+    lon = +pos.coords.longitude.toFixed(6);
+  } catch(_) {}
+
+  const now = new Date();
+  const rec = {
+    userName     : match.name,
+    type         : 'exit',
+    method,                            // 'gesto' | 'botao'
+    timestamp    : now.toISOString(),
+    locationName : locNm,
+    lat, lon,
+    synced       : false,
+  };
+  await dbPut('punches', rec);
+
+  // Tela de sucesso
+  document.getElementById('doneName').textContent = match.name;
+  document.getElementById('doneTime').textContent = now.toLocaleTimeString('pt-BR');
+  document.getElementById('doneSub').textContent  =
+    'Saída registrada · confirmado por ' + (method==='gesto' ? 'gesto 👍' : 'botão');
+  document.getElementById('doneOv').classList.add('on');
+
+  if (navigator.vibrate) navigator.vibrate([40,60,40]);
+  updPending();
+  if (navigator.onLine) syncNow(true);
+
+  setTimeout(() => {
+    document.getElementById('doneOv').classList.remove('on');
+    curMatch = null;
+    mode     = 'scanning';
+    setIdleBtn();
+  }, DONE_DURATION);
+}
+
+// ─── SYNC ────────────────────────────────────────────────────────────────────
+async function syncNow(silent=false) {
+  const url = await getCfg('webhook','');
+  if (!url) { if(!silent) toast('Configure a URL do webhook.'); return; }
+  if (!navigator.onLine) { if(!silent) toast('Sem conexão.'); return; }
+
+  const all     = await dbAll('punches');
+  const pending = all.filter(p=>!p.synced);
+  if (!pending.length) { if(!silent) toast('Sem registros pendentes.'); return; }
+
+  const dot = document.getElementById('netDot');
+  dot.className = 'dot sync';
+
+  try {
+    // text/plain evita o preflight CORS que o Apps Script rejeita.
+    const r = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({records: pending}),
+    });
+    const json = await r.json();
+    if (json.ok) {
+      for (const p of pending) { p.synced=true; await dbPut('punches',p); }
+      if(!silent) toast(`${pending.length} registro(s) sincronizado(s)! ✓`);
+      if(adminOpen) renderPlog();
+    } else {
+      if(!silent) toast('Erro no servidor: '+(json.error||'desconhecido'));
+    }
+  } catch(e) {
+    if(!silent) toast('Falha ao sincronizar. Tente novamente.');
+  }
+  dot.className = 'dot'+(navigator.onLine?'':' off');
+  updPending();
+}
+
+// ─── ADMIN ───────────────────────────────────────────────────────────────────
+async function goAdmin() {
+  const pin = await getCfg('pin','1234');
+  const entered = prompt('PIN de administrador:');
+  if (entered === null) return;
+  if (entered !== pin) { toast('PIN incorreto.'); return; }
+
+  cancelConfirm();
+  adminOpen = true;
+
+  document.getElementById('cfgLoc').value     = await getCfg('loc','');
+  document.getElementById('cfgUrl').value     = await getCfg('webhook','');
+  document.getElementById('cfgPin').value     = '';
+  document.getElementById('cfgWake').checked  = wakeWanted;
+  document.getElementById('cfgGesture').checked = gestureOn;
+  renderUserList();
+  renderPlog();
+
+  document.getElementById('vPunch').classList.remove('active');
+  document.getElementById('vAdmin').classList.add('active');
+}
+
+function goBack() {
+  adminOpen = false;
+  mode      = 'scanning';
+  setIdleBtn();
+  document.getElementById('vAdmin').classList.remove('active');
+  document.getElementById('vPunch').classList.add('active');
+}
+
+async function saveSettings() {
+  const loc = document.getElementById('cfgLoc').value.trim();
+  const url = document.getElementById('cfgUrl').value.trim();
+  const pin = document.getElementById('cfgPin').value.trim();
+  if (pin.length > 0 && pin.length < 4) { toast('PIN deve ter ao menos 4 dígitos.'); return; }
+
+  const wake = document.getElementById('cfgWake').checked;
+  const gest = document.getElementById('cfgGesture').checked;
+
+  await setCfg('loc', loc);
+  await setCfg('webhook', url);
+  if (pin.length >= 4) await setCfg('pin', pin);
+  await setCfg('wake', wake);
+  await setCfg('gesture', gest);
+
+  wakeWanted = wake;
+  if (wake) acquireWakeLock(); else releaseWakeLock();
+
+  const wasOff = !gestureOn;
+  gestureOn = gest;
+  if (gest && wasOff && !gestureRec) { toast('Carregando gestos…'); await initGestures(); }
+
+  toast('Configurações salvas! ✓');
+}
+
+function renderUserList() {
+  const el = document.getElementById('userList');
+  if (!users.length) { el.innerHTML='<p class="empty-msg">Nenhum funcionário cadastrado.</p>'; return; }
+  el.innerHTML = users.map(u=>`
+    <div class="user-item">
+      <img class="uavatar" src="${u.thumb||''}" onerror="this.style.visibility='hidden'">
+      <div class="uinfo">
+        <div class="uname">${esc(u.name)}</div>
+        <div class="uphotos">${u.descs.length} foto(s)</div>
+      </div>
+      <button class="btn btn-red btn-sm" onclick="delUser(${u.id})">Remover</button>
+    </div>`).join('');
+}
+
+async function renderPlog() {
+  const el   = document.getElementById('plogList');
+  const all  = await dbAll('punches');
+  const pend = all.filter(p=>!p.synced).reverse();
+  if (!pend.length) { el.innerHTML='<p class="empty-msg">Nenhum registro pendente.</p>'; return; }
+  el.innerHTML = pend.map(p=>`
+    <div class="plog-item">
+      <span class="plog-name">${esc(p.userName)}</span> — Saída
+      <span class="plog-time"> · ${new Date(p.timestamp).toLocaleString('pt-BR')}</span>
+      <br><small>${esc(p.locationName)} · ${p.method==='gesto'?'gesto 👍':'botão'}</small>
+    </div>`).join('');
+}
+
+async function delUser(id) {
+  if (!confirm('Remover este funcionário e suas fotos cadastradas?')) return;
+  await dbDel('users', id);
+  await loadUsers();
+  renderUserList();
+}
+
+// ─── LOAD USERS ──────────────────────────────────────────────────────────────
+async function loadUsers() {
+  users = await dbAll('users');
+  buildMatcher();
+}
+
+function buildMatcher() {
+  if (!users.length) { matcher = null; return; }
+  try {
+    const labeled = users.map(u =>
+      new faceapi.LabeledFaceDescriptors(u.name,
+        u.descs.map(d => new Float32Array(d)))
+    );
+    matcher = new faceapi.FaceMatcher(labeled, 0.6);
+  } catch(_) { matcher = null; }
+}
+
+// ─── REGISTER MODAL ──────────────────────────────────────────────────────────
+async function openReg() {
+  regDescs  = [];
+  regThumbs = [];
+  document.getElementById('regName').value    = '';
+  document.getElementById('thumbs').innerHTML = '';
+  document.getElementById('regStatus').textContent = 'Tire 3 fotos para melhor precisão (mínimo 1).';
+  document.getElementById('btnSave').disabled = true;
+  document.getElementById('modalReg').classList.add('on');
+
+  try {
+    regStream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'user', width:{ideal:640}, height:{ideal:480}},
+      audio:false
+    });
+    document.getElementById('regVideo').srcObject = regStream;
+  } catch(e) {
+    toast('Não foi possível acessar a câmera: '+e.message);
+    closeReg();
+  }
+}
+
+function closeReg() {
+  document.getElementById('modalReg').classList.remove('on');
+  if (regStream) { regStream.getTracks().forEach(t=>t.stop()); regStream=null; }
+}
+
+async function capture() {
+  const rv = document.getElementById('regVideo');
+  if (rv.readyState < 2) { toast('Câmera não está pronta.'); return; }
+  const btn = document.getElementById('btnCapture');
+  btn.disabled = true;
+  document.getElementById('regStatus').textContent = '🔍 Detectando rosto…';
+
+  const det = await faceapi
+    .detectSingleFace(rv, OPTS)
+    .withFaceLandmarks(true)
+    .withFaceDescriptor();
+
+  btn.disabled = false;
+
+  if (!det) {
+    document.getElementById('regStatus').textContent = '⚠ Nenhum rosto detectado. Ajuste a posição e tente novamente.';
+    return;
+  }
+
+  const c   = document.createElement('canvas');
+  const pad = 20;
+  const bx  = det.detection.box;
+  c.width   = 80; c.height = 80;
+  c.getContext('2d').drawImage(rv,
+    Math.max(0,bx.x-pad), Math.max(0,bx.y-pad),
+    bx.width+pad*2, bx.height+pad*2,
+    0,0,80,80
+  );
+  const thumb = c.toDataURL('image/jpeg',0.65);
+
+  regDescs.push(Array.from(det.descriptor));
+  regThumbs.push(thumb);
+
+  const img = document.createElement('img');
+  img.src   = thumb;
+  document.getElementById('thumbs').appendChild(img);
+
+  const n = regDescs.length;
+  document.getElementById('regStatus').textContent =
+    `✓ ${n} foto(s). ${n<3?`Capture mais ${3-n} para melhor precisão.`:'Ótimo! Pode salvar.'}`;
+  document.getElementById('btnSave').disabled = false;
+}
+
+async function saveUser() {
+  const name = document.getElementById('regName').value.trim();
+  if (!name)            { toast('Informe o nome do funcionário.'); return; }
+  if (!regDescs.length) { toast('Capture ao menos 1 foto.'); return; }
+
+  const existing = users.find(u=>u.name.toLowerCase()===name.toLowerCase());
+  if (existing) {
+    if (!confirm(`"${name}" já está cadastrado. Substituir as fotos?`)) return;
+    existing.descs = regDescs;
+    existing.thumb = regThumbs[0];
+    await dbPut('users', existing);
+  } else {
+    await dbPut('users', {
+      name,
+      descs: regDescs,
+      thumb: regThumbs[0],
+      at   : new Date().toISOString(),
+    });
+  }
+
+  toast(`"${name}" cadastrado com sucesso! ✓`);
+  closeReg();
+  await loadUsers();
+  renderUserList();
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+let _toastT;
+function toast(msg, dur=3200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('on');
+  clearTimeout(_toastT);
+  _toastT = setTimeout(()=>el.classList.remove('on'), dur);
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g,c=>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+function copyScript() {
+  navigator.clipboard.writeText(APPS_SCRIPT)
+    .then(()=>toast('Código copiado para a área de transferência! ✓'))
+    .catch(()=>toast('Selecione e copie o código manualmente.'));
+}
+
+// ─── SERVICE WORKER ──────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () =>
+    navigator.serviceWorker.register('sw.js').catch(()=>{})
+  );
+}
+
+// ─── BOOT ────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
