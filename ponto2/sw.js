@@ -8,16 +8,17 @@
 
 // Ao trocar ícones/manifest, suba a versão: é o que faz o celular descartar o
 // cache antigo e buscar os arquivos novos.
-const CACHE = 'ponto-saida-v2';
+const CACHE = 'ponto-saida-v3';
 
 // Mesma origem — precisa funcionar para o app abrir offline.
 const CORE = [
   './',
   './index.html',
   './manifest.json',
-  './icon.svg',
   './icon-192.png',
   './icon-512.png',
+  './icon-192-maskable.png',
+  './icon-512-maskable.png',
   './apple-touch-icon.png',
 ];
 
