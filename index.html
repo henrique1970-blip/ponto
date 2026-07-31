@@ -3,8 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- Título e ícone do atalho na tela inicial do iPhone (iOS ignora o manifest). -->
+<meta name="apple-mobile-web-app-title" content="Ponto">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>Ponto Digital</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1565C0">
@@ -119,6 +124,49 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 pre.script{font-size:.68rem;background:#F1F5F9;border-radius:8px;padding:10px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin-top:8px;line-height:1.5}
 details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:600;margin-top:8px}
 
+/* ---- MODAL GPS (bloqueante, centralizado) ---- */
+.gps-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.88);z-index:400;
+  align-items:center;justify-content:center;padding:22px;backdrop-filter:blur(3px)}
+.gps-bg.on{display:flex}
+.gps-box{background:#fff;border-radius:18px;padding:26px 22px;max-width:360px;width:100%;text-align:center;
+  box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.gps-icon{font-size:2.8rem;line-height:1;margin-bottom:10px}
+.gps-title{font-size:1.15rem;font-weight:800;color:var(--red);margin-bottom:8px}
+.gps-txt{font-size:.88rem;color:var(--text);line-height:1.6;margin-bottom:14px}
+.gps-help{font-size:.76rem;color:var(--text2);line-height:1.6;margin-top:12px;text-align:left;
+  background:#F8FAFC;border-radius:9px;padding:10px}
+.gps-help b{color:var(--text)}
+
+/* ---- PROTEÇÃO DE TELA ---- */
+#shield{display:none;position:fixed;inset:0;background:#0F172A;z-index:900;
+  align-items:center;justify-content:center;flex-direction:column;gap:12px;color:#fff;text-align:center;padding:24px}
+#shield.on{display:flex}
+#shield .s-ico{font-size:3rem}
+#shield .s-txt{font-size:.9rem;opacity:.8;line-height:1.6}
+.no-copy{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* Campos e o bloco do Apps Script continuam selecionáveis — sem isso o iOS
+   impede digitar no Admin e não dá para copiar o script à mão. */
+.no-copy input,.no-copy textarea,.no-copy pre.script{
+  -webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.wmark{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;z-index:3}
+.wmark span{font-size:.8rem;font-weight:700;color:rgba(255,255,255,.16);white-space:nowrap;
+  transform:rotate(-28deg);letter-spacing:1px;text-align:center;line-height:2.6}
+
+/* ---- INSTALAÇÃO ---- */
+.hdr-btn.install{background:#FBBF24;color:#3F2D00;display:none}
+.hdr-btn.install.on{display:inline-block}
+.ios-steps{font-size:.85rem;line-height:1.9;color:var(--text);padding-left:4px}
+.ios-steps li{margin-bottom:6px}
+
+/* ---- OFFLINE ---- */
+.off-state{font-size:.82rem;padding:9px 11px;border-radius:9px;background:#F8FAFC;margin-bottom:10px;line-height:1.55}
+.off-state.ok{background:#ECFDF5;color:#065F46}
+.off-state.warn{background:#FFFBEB;color:#92400E}
+.bar{height:7px;background:#E5E7EB;border-radius:5px;overflow:hidden;margin-top:8px;display:none}
+.bar.on{display:block}
+.bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .25s}
+
 /* ---- RESPONSIVE DESKTOP ---- */
 @media(min-width:600px){
   .punch-panel{padding:16px 20px}
@@ -128,7 +176,13 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 }
 </style>
 </head>
-<body>
+<body class="no-copy">
+
+<!-- PROTEÇÃO DE TELA (cobre o app ao sair para o alternador de apps) -->
+<div id="shield">
+  <div class="s-ico">🔒</div>
+  <div class="s-txt">Conteúdo protegido.<br>Volte ao app para continuar.</div>
+</div>
 
 <!-- LOADING SCREEN -->
 <div id="loading">
@@ -143,6 +197,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 <div class="view active" id="vPunch">
   <div class="hdr">
     <h1>⏱ Ponto Digital</h1>
+    <button class="hdr-btn install" id="btnInstall" onclick="doInstall()">⬇ Instalar</button>
     <button class="hdr-btn" onclick="goAdmin()">Admin</button>
   </div>
   <div class="sbar">
@@ -153,6 +208,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
   <div class="cam-wrap">
     <video id="video" autoplay muted playsinline></video>
     <canvas id="overlay"></canvas>
+    <div class="wmark" id="wmark"><span></span></div>
     <div class="face-ring" id="faceRing"></div>
     <div class="cam-msg" id="camMsg">Posicione o rosto na câmera</div>
     <div class="name-badge" id="nameBadge"></div>
@@ -208,6 +264,46 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       <button class="btn btn-blue btn-full" onclick="syncNow(false)">Sincronizar com Google Sheets</button>
     </div>
 
+    <!-- Offline -->
+    <div class="card">
+      <div class="card-title">📴 Uso offline</div>
+      <div class="off-state" id="offState">Verificando…</div>
+      <p style="font-size:.78rem;color:#555;line-height:1.6">
+        Baixa a biblioteca e os modelos de reconhecimento facial (<b>~7,5 MB</b>) para o aparelho.
+        Depois disso o app abre e registra ponto <b>sem internet</b> — os registros ficam
+        guardados e sobem sozinhos quando a conexão voltar. Faça isso no Wi-Fi.
+      </p>
+      <div class="bar" id="dlBar"><i id="dlFill"></i></div>
+      <button class="btn btn-blue btn-full" id="btnDl" onclick="downloadOffline()">⬇ Baixar tudo para uso offline</button>
+    </div>
+
+    <!-- Instalação -->
+    <div class="card">
+      <div class="card-title">📱 Instalar no aparelho</div>
+      <div class="off-state" id="instState">Verificando…</div>
+      <p style="font-size:.78rem;color:#555;line-height:1.6">
+        Cria o atalho do Ponto Digital na tela inicial, com ícone próprio e sem barra do navegador.
+      </p>
+      <button class="btn btn-green btn-full" onclick="doInstall()">📲 Criar atalho na tela inicial</button>
+    </div>
+
+    <!-- Privacidade de tela -->
+    <div class="card">
+      <div class="card-title">🔒 Proteção de tela</div>
+      <div class="off-state warn">
+        ⚠ Nenhum site consegue impedir print de tela no Android ou no iPhone.
+        Só um aplicativo nativo faz isso. As medidas abaixo são o que a web permite.
+      </div>
+      <p style="font-size:.78rem;color:#555;line-height:1.7">
+        <b>Ativo neste app:</b><br>
+        • O app é coberto assim que sai de foco — a miniatura no alternador de apps
+          e gravações em segundo plano não mostram nome nem horário.<br>
+        • Seleção de texto, cópia, menu de contexto e arrastar imagem estão bloqueados.<br>
+        • Marca d'água com o local e o horário sobre a câmera: um print continua
+          possível, mas sai identificado.
+      </p>
+    </div>
+
     <!-- Instructions -->
     <div class="card">
       <div class="card-title">📋 Como configurar o Google Sheets</div>
@@ -248,6 +344,31 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
   </div>
 </div>
 
+<!-- ========== MODAL: Localização obrigatória ========== -->
+<div class="gps-bg" id="gpsModal">
+  <div class="gps-box">
+    <div class="gps-icon">📍</div>
+    <div class="gps-title" id="gpsTitle">Localização desligada</div>
+    <p class="gps-txt" id="gpsTxt">
+      O registro de ponto exige a localização ligada.
+      Ative o GPS do aparelho e toque no botão abaixo.
+    </p>
+    <button class="btn btn-blue btn-full" id="gpsBtn" onclick="requestGeo(true)">Ativar localização</button>
+    <div class="gps-help" id="gpsHelp"></div>
+  </div>
+</div>
+
+<!-- ========== MODAL: Instalar (iOS / navegador sem prompt) ========== -->
+<div class="modal-bg" id="modalInstall">
+  <div class="modal">
+    <div class="modal-title">📲 Criar atalho na tela inicial</div>
+    <div id="instHow"></div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('modalInstall').classList.remove('on')">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- face-api.js -->
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script>
@@ -256,8 +377,9 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 // ─── APPS SCRIPT CODE ──────────────────────────────────────────────────────
 const APPS_SCRIPT = `const TZ    = 'America/Sao_Paulo';
 const ABA   = 'Registros';
-const COLS  = ['ID','Nome','Tipo','Data','Hora','Local','Latitude','Longitude','Chave'];
-const CHAVE = 9;   // coluna da chave de deduplicação (A=1 … I=9)
+const COLS  = ['ID','Nome','Tipo','Data','Hora','Local','Latitude','Longitude','Precisão (m)','Chave'];
+const PREC  = 9;   // raio de erro do GPS informado pelo aparelho (A=1 … I=9)
+const CHAVE = 10;  // coluna da chave de deduplicação, oculta (J=10)
 
 function doPost(e) {
   // O app reenvia tudo que ainda não foi confirmado. Se dois envios chegarem
@@ -289,6 +411,7 @@ function doPost(e) {
         r.locationName,
         r.lat != null ? r.lat : '',
         r.lon != null ? r.lon : '',
+        r.accuracy != null ? r.accuracy : '',
         chave
       ]);
     });
@@ -316,13 +439,21 @@ function getSheet_() {
   let sheet = ss.getSheetByName(ABA);
   if (!sheet) {
     sheet = ss.insertSheet(ABA);
-    sheet.appendRow(COLS);
+    sheet.getRange(1, 1, 1, COLS.length).setValues([COLS]);
     sheet.setFrozenRows(1);
     sheet.hideColumns(CHAVE);          // a chave é uso interno, não polui a vista
     return sheet;
   }
-  // Planilha da versão antiga (8 colunas): completa o cabeçalho da Chave.
-  if (sheet.getRange(1, CHAVE).getValue() !== COLS[CHAVE - 1]) {
+
+  // Planilha do layout de 9 colunas (Chave na I, sem Precisão): abre espaço na I.
+  // insertColumnBefore arrasta a coluna Chave inteira — COM os dados — para a J,
+  // então as chaves já gravadas continuam valendo e nada volta em duplicata.
+  if (sheet.getRange(1, PREC).getValue() === 'Chave') sheet.insertColumnBefore(PREC);
+
+  // Cabeçalho fora do padrão (planilha antiga de 8 colunas, ou a migração acima
+  // que deixou a I sem título): reescreve a linha 1 inteira.
+  const atual = sheet.getRange(1, 1, 1, COLS.length).getValues()[0];
+  if (atual.join('|') !== COLS.join('|')) {
     sheet.getRange(1, 1, 1, COLS.length).setValues([COLS]);
     sheet.setFrozenRows(1);
     sheet.hideColumns(CHAVE);
@@ -385,26 +516,47 @@ let regStream  = null;
 let regDescs   = [];
 let regThumbs  = [];
 let adminOpen  = false;
+let detBusy    = false;  // evita detecções sobrepostas em aparelho lento
+let punching   = false;  // trava o botão do início ao fim do registro
+let coolUntil  = 0;      // carência após registrar, evita toque duplo
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 async function init() {
   await openDB();
+
+  // O service worker precisa estar no ar antes dos modelos: é ele que os serve
+  // do cache quando não há internet.
+  await registerSW();
+
   setLoadMsg('Carregando modelo de detecção…');
+  if (!await loadModels()) return;
+
+  document.getElementById('loading').style.display = 'none';
+  await loadUsers();
+  startClock();
+  watchNetwork();
+  guardScreen();
+  startGeo();
+  await startCamera();
+}
+
+async function loadModels() {
   try {
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODELS),
       faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODELS),
       faceapi.nets.faceRecognitionNet.loadFromUri(MODELS),
     ]);
+    return true;
   } catch(e) {
-    setLoadMsg('❌ Erro ao carregar modelos.\nVerifique a conexão e recarregue a página.');
-    return;
+    setLoadMsg(navigator.onLine
+      ? '❌ Erro ao carregar os modelos.\nVerifique a conexão e toque para tentar de novo.'
+      : '📴 Sem conexão e os modelos ainda não foram baixados.\nConecte-se uma vez para baixá-los; depois o app funciona offline.');
+    const load = document.getElementById('loading');
+    load.style.cursor = 'pointer';
+    load.onclick = () => { load.onclick=null; setLoadMsg('Tentando novamente…'); init(); };
+    return false;
   }
-  document.getElementById('loading').style.display = 'none';
-  await loadUsers();
-  startClock();
-  watchNetwork();
-  await startCamera();
 }
 function setLoadMsg(m) { document.getElementById('load-msg').innerHTML = m.replace('\n','<br>'); }
 
@@ -454,11 +606,14 @@ async function startCamera() {
       audio:false
     });
     video.srcObject = stream;
-    video.onloadedmetadata = () => {
+    const ready = () => {
       overlay.width  = video.videoWidth;
       overlay.height = video.videoHeight;
       startDetect();
     };
+    // Em alguns aparelhos os metadados já chegaram quando o handler é ligado —
+    // aí o evento nunca dispara e a detecção não começa.
+    if (video.readyState >= 1) ready(); else video.onloadedmetadata = ready;
   } catch(e) {
     toast('Câmera indisponível: '+e.message, 6000);
     document.getElementById('camMsg').textContent = '⚠ Câmera bloqueada';
@@ -481,7 +636,12 @@ function loop() {
 }
 
 async function detect() {
-  if (video.readyState < 2 || adminOpen) return;
+  if (video.readyState < 2 || adminOpen || detBusy) return;
+  detBusy = true;
+  try { await detectOnce(); } finally { detBusy = false; }
+}
+
+async function detectOnce() {
   const dets = await faceapi
     .detectAllFaces(video, OPTS)
     .withFaceLandmarks(true)
@@ -531,13 +691,142 @@ async function detect() {
   setPunchBtn(null, users.length ? 'Rosto não reconhecido' : 'Cadastre funcionários no Admin');
 }
 
+// ─── LOCALIZAÇÃO — OBRIGATÓRIA PARA REGISTRAR ────────────────────────────────
+// Sem posição válida e recente o botão fica travado e o modal central sobe.
+// O que o navegador entrega é sempre o serviço de localização do sistema: se o
+// usuário desliga a localização do aparelho, vem POSITION_UNAVAILABLE (code 2).
+const GEO_MAX_AGE   = 90000;   // idade máxima de um fix para valer como "ligada"
+const GEO_HEARTBEAT = 25000;   // de quanto em quanto tempo reconfirmamos
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+let geoOk   = false;
+let geoLast = 0;      // instante do último fix aceito
+let geoErr  = null;   // último GeolocationPositionError
+
+function startGeo() {
+  if (!('geolocation' in navigator)) {
+    geoOk = false;
+    showGpsModal('Este navegador não expõe a localização. Use o Chrome (Android) ou o Safari (iPhone).', true);
+    return;
+  }
+  // Avisa quando a permissão muda por fora do app (Android/Chrome).
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({name:'geolocation'})
+      .then(p => { p.onchange = () => requestGeo(false); })
+      .catch(()=>{});
+  }
+  // Watch contínuo: o erro chega no instante em que a localização é desligada.
+  navigator.geolocation.watchPosition(onGeoOk, onGeoErr,
+    {enableHighAccuracy:false, timeout:20000, maximumAge:0});
+
+  requestGeo(false);
+  setInterval(geoHeartbeat, GEO_HEARTBEAT);
+}
+
+function onGeoOk(pos) {
+  geoOk = true; geoLast = Date.now(); geoErr = null;
+  hideGpsModal();
+}
+
+function onGeoErr(err) {
+  geoErr = err;
+  // Permissão negada trava na hora; falha de sinal só depois que o último fix envelhece.
+  if (err.code === 1 || Date.now() - geoLast > GEO_MAX_AGE) {
+    geoOk = false;
+    showGpsModal();
+  }
+}
+
+async function geoHeartbeat() {
+  try { onGeoOk(await geoOnce({enableHighAccuracy:false, timeout:12000, maximumAge:GEO_MAX_AGE})); }
+  catch(e) { onGeoErr(e); }
+  if (geoOk && Date.now() - geoLast > GEO_MAX_AGE) { geoOk = false; showGpsModal(); }
+}
+
+const geoOnce = opts => new Promise((res,rej) =>
+  navigator.geolocation.getCurrentPosition(res, rej, opts));
+
+// Posição recente de verdade. Tenta alta precisão; se o GPS não fixar a tempo
+// (comum dentro de galpão), aceita a localização aproximada da rede.
+async function getFreshPosition(timeout=12000) {
+  try {
+    return await geoOnce({enableHighAccuracy:true, timeout, maximumAge:15000});
+  } catch(e) {
+    if (e && e.code === 1) throw e;          // permissão negada: não adianta insistir
+    return await geoOnce({enableHighAccuracy:false, timeout:9000, maximumAge:30000});
+  }
+}
+
+async function requestGeo(fromUser) {
+  const btn = document.getElementById('gpsBtn');
+  if (fromUser) { btn.disabled = true; btn.textContent = 'Procurando sinal…'; }
+  try {
+    onGeoOk(await getFreshPosition(fromUser ? 20000 : 12000));
+    if (fromUser) toast('Localização ativa ✓');
+  } catch(e) {
+    onGeoErr(e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Ativar localização';
+  }
+}
+
+function showGpsModal(custom, fatal) {
+  if (adminOpen) return;                     // não trancar a tela de configuração
+  const code = geoErr && geoErr.code;
+  const t = document.getElementById('gpsTitle');
+  const p = document.getElementById('gpsTxt');
+
+  if (custom) {
+    t.textContent = 'Localização indisponível';
+    p.textContent = custom;
+  } else if (code === 1) {
+    t.textContent = 'Localização bloqueada';
+    p.textContent = 'O acesso à localização foi negado para este app. Libere a permissão e toque em "Ativar localização".';
+  } else {
+    t.textContent = 'Localização desligada';
+    p.textContent = 'O registro de ponto exige a localização ligada. Ative-a no aparelho e toque no botão abaixo.';
+  }
+  document.getElementById('gpsHelp').innerHTML = geoHelpHTML(code === 1);
+  document.getElementById('gpsBtn').style.display = fatal ? 'none' : '';
+  document.getElementById('gpsModal').classList.add('on');
+}
+
+function hideGpsModal() { document.getElementById('gpsModal').classList.remove('on'); }
+
+function geoHelpHTML(denied) {
+  if (IS_IOS) return denied
+    ? '<b>iPhone:</b> Ajustes → Privacidade e Segurança → Serviços de Localização → <b>Safari</b> (ou este app) → "Ao usar o app".'
+    : '<b>iPhone:</b> Ajustes → Privacidade e Segurança → <b>Serviços de Localização</b> → ligar.';
+  return denied
+    ? '<b>Android:</b> toque no cadeado ao lado do endereço → Permissões → <b>Localização: Permitir</b>. No app instalado: Configurações → Apps → Ponto Digital → Permissões → Localização.'
+    : '<b>Android:</b> puxe a barra de notificações e ligue <b>Localização</b>, ou Configurações → Localização.';
+}
+
 // ─── PUNCH BUTTON ────────────────────────────────────────────────────────────
+const PUNCH_COOLDOWN = 8000;   // carência após registrar, evita toque duplo
+
 async function setPunchBtn(match, msg='Aguardando rosto…') {
   const btn = document.getElementById('btnPunch');
+  if (punching) return;                       // doPunch é dono do botão enquanto grava
+
+  const left = coolUntil - Date.now();
+  if (left > 0) {
+    btn.disabled = true;
+    btn.className = 'btn-punch';
+    btn.textContent = `✓ Registrado — aguarde ${Math.ceil(left/1000)}s`;
+    return;
+  }
   if (!match) {
     btn.disabled = true;
     btn.textContent = msg;
     btn.className = 'btn-punch';
+    return;
+  }
+  if (!geoOk) {                               // trava dura: sem localização, sem ponto
+    btn.disabled = true;
+    btn.className = 'btn-punch';
+    btn.textContent = '📍 Ative a localização';
     return;
   }
   const type   = await nextType(match.name);
@@ -549,42 +838,58 @@ async function setPunchBtn(match, msg='Aguardando rosto…') {
 async function nextType(name) {
   const all   = await dbAll('punches');
   const today = new Date().toDateString();
-  const mine  = all.filter(p=>p.userName===name && new Date(p.timestamp).toDateString()===today);
+  const mine  = all
+    .filter(p=>p.userName===name && new Date(p.timestamp).toDateString()===today)
+    .sort((a,b)=> new Date(a.timestamp) - new Date(b.timestamp));
   const last  = mine[mine.length-1];
   return (!last || last.type==='exit') ? 'entry' : 'exit';
 }
 
 async function doPunch() {
-  if (!curMatch) return;
-  const btn = document.getElementById('btnPunch');
+  if (!curMatch || punching || Date.now() < coolUntil) return;
+  if (!geoOk) { showGpsModal(); return; }
+
+  punching = true;
+  const name = curMatch.name;
+  const btn  = document.getElementById('btnPunch');
   btn.disabled = true;
 
-  const type  = await nextType(curMatch.name);
-  const locNm = await getCfg('loc','Local não configurado');
-
-  let lat=null, lon=null;
   try {
-    const pos = await new Promise((r,j) =>
-      navigator.geolocation.getCurrentPosition(r, j, {timeout:3500, enableHighAccuracy:false})
-    );
-    lat = +pos.coords.latitude.toFixed(6);
-    lon = +pos.coords.longitude.toFixed(6);
-  } catch(_) {}
+    // A posição é lida AGORA, na hora do registro — não vale reaproveitar o
+    // fix do watch, que pode ser de minutos atrás e de outro lugar.
+    btn.textContent = '📍 Obtendo localização…';
+    let pos;
+    try {
+      pos = await getFreshPosition(12000);
+      onGeoOk(pos);
+    } catch(err) {
+      onGeoErr(err);
+      showGpsModal();
+      toast('Localização indisponível — ponto NÃO registrado.', 5000);
+      return;
+    }
 
-  const rec = {
-    userName   : curMatch.name,
-    type,
-    timestamp  : new Date().toISOString(),
-    locationName: locNm,
-    lat, lon,
-    synced     : false,
-  };
-  await dbPut('punches', rec);
+    const type  = await nextType(name);
+    const locNm = await getCfg('loc','Local não configurado');
+    await dbPut('punches', {
+      userName    : name,
+      type,
+      timestamp   : new Date().toISOString(),
+      locationName: locNm,
+      lat         : +pos.coords.latitude.toFixed(6),
+      lon         : +pos.coords.longitude.toFixed(6),
+      accuracy    : Math.round(pos.coords.accuracy),
+      synced      : false,
+    });
 
-  toast(`${type==='entry'?'Entrada':'Saída'} registrada: ${curMatch.name}`);
-  updPending();
-  await setPunchBtn(curMatch);
-  if (navigator.onLine) syncNow(true);
+    toast(`${type==='entry'?'Entrada':'Saída'} registrada: ${name}`);
+    coolUntil = Date.now() + PUNCH_COOLDOWN;
+    updPending();
+    if (navigator.onLine) syncNow(true);
+  } finally {
+    punching = false;
+    setPunchBtn(curMatch);
+  }
 }
 
 // ─── SYNC ────────────────────────────────────────────────────────────────────
@@ -628,12 +933,15 @@ async function goAdmin() {
   if (entered === null) return;
   if (entered !== pin) { toast('PIN incorreto.'); return; }
   adminOpen = true;
+  hideGpsModal();          // a tela de configuração não fica travada pelo GPS
 
   document.getElementById('cfgLoc').value = await getCfg('loc','');
   document.getElementById('cfgUrl').value = await getCfg('webhook','');
   document.getElementById('cfgPin').value = '';
   renderUserList();
   renderPlog();
+  updInstallUI();
+  offlineStatus();
 
   document.getElementById('vPunch').classList.remove('active');
   document.getElementById('vAdmin').classList.add('active');
@@ -643,6 +951,7 @@ function goBack() {
   adminOpen = false;
   document.getElementById('vAdmin').classList.remove('active');
   document.getElementById('vPunch').classList.add('active');
+  if (!geoOk) showGpsModal();   // de volta ao ponto, a trava vale de novo
 }
 
 async function saveSettings() {
@@ -653,6 +962,7 @@ async function saveSettings() {
   await setCfg('webhook', url);
   if (pin.length >= 4) await setCfg('pin', pin);
   else if (pin.length > 0) { toast('PIN deve ter ao menos 4 dígitos.'); return; }
+  setWatermark();
   toast('Configurações salvas! ✓');
 }
 
@@ -826,14 +1136,186 @@ function copyScript() {
     .catch(()=>toast('Selecione e copie o código manualmente.'));
 }
 
-// ─── SERVICE WORKER ──────────────────────────────────────────────────────────
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () =>
-    navigator.serviceWorker.register('sw.js').catch(()=>{})
-  );
+// ─── PROTEÇÃO DE TELA ────────────────────────────────────────────────────────
+// Aviso honesto: NÃO existe API na web que impeça um print de tela no Android
+// ou no iPhone — só app nativo (FLAG_SECURE no Android) consegue bloquear.
+// O que dá para fazer, e está feito aqui:
+//   · cobrir o app assim que ele sai de foco → a miniatura no alternador de
+//     apps e a gravação de tela em segundo plano não mostram nome nem horário;
+//   · impedir seleção de texto, cópia, menu de contexto e arrastar imagem;
+//   · marca d'água com local e horário, para que qualquer print seja rastreável.
+function guardScreen() {
+  const shield = document.getElementById('shield');
+  const cover  = on => shield.classList.toggle('on', on);
+
+  document.addEventListener('visibilitychange', () => cover(document.hidden));
+  window.addEventListener('pagehide', () => cover(true));
+  window.addEventListener('pageshow', () => cover(false));
+
+  // Nos campos o menu de contexto fica liberado: é por ele que se cola a URL
+  // do webhook no celular.
+  document.addEventListener('contextmenu', e => {
+    if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault();
+  });
+  document.addEventListener('dragstart', e => e.preventDefault());
+  document.addEventListener('selectstart', e => {
+    const t = e.target;
+    const livre = /^(INPUT|TEXTAREA)$/.test(t.tagName) ||
+                  (t.closest && t.closest('pre.script'));
+    if (!livre) e.preventDefault();
+  });
+
+  setWatermark();
+  setInterval(setWatermark, 30000);
+}
+
+async function setWatermark() {
+  const loc = await getCfg('loc','Ponto Digital');
+  const txt = `${loc} · ${new Date().toLocaleString('pt-BR')}`;
+  document.querySelector('#wmark span').textContent = (txt + '   ·   ').repeat(3);
+}
+
+// ─── INSTALAÇÃO / ATALHO NA TELA INICIAL ─────────────────────────────────────
+let deferredPrompt = null;
+
+function isStandalone() {
+  return matchMedia('(display-mode: standalone)').matches ||
+         matchMedia('(display-mode: fullscreen)').matches ||
+         navigator.standalone === true;
+}
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();               // guardamos para disparar no clique do usuário
+  deferredPrompt = e;
+  updInstallUI();
+});
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  updInstallUI();
+  toast('App instalado — o atalho já está na tela inicial ✓', 4500);
+});
+
+function updInstallUI() {
+  const btn = document.getElementById('btnInstall');
+  const st  = document.getElementById('instState');
+  btn.classList.toggle('on', !isStandalone());
+  if (!st) return;
+  if (isStandalone()) {
+    st.className = 'off-state ok';
+    st.textContent = '✅ App instalado — o atalho já está na tela inicial.';
+  } else if (deferredPrompt) {
+    st.className = 'off-state warn';
+    st.textContent = '⚠ Ainda não instalado. Toque no botão abaixo para criar o atalho.';
+  } else if (IS_IOS) {
+    st.className = 'off-state warn';
+    st.textContent = '⚠ No iPhone o atalho é criado pelo menu Compartilhar do Safari. Toque abaixo para ver o passo a passo.';
+  } else {
+    st.className = 'off-state warn';
+    st.textContent = '⚠ Ainda não instalado. Toque abaixo para ver o passo a passo.';
+  }
+}
+
+async function doInstall() {
+  if (isStandalone()) { toast('O app já está instalado neste aparelho.'); return; }
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    updInstallUI();
+    toast(outcome === 'accepted'
+      ? 'Instalando… o atalho aparecerá na tela inicial.'
+      : 'Instalação cancelada.');
+    return;
+  }
+  showInstallHelp();
+}
+
+function showInstallHelp() {
+  document.getElementById('instHow').innerHTML = IS_IOS
+    ? `<ol class="ios-steps">
+         <li>Abra este endereço no <b>Safari</b> (o Chrome do iPhone não cria o atalho).</li>
+         <li>Toque em <b>Compartilhar</b> ⬆️, na barra de baixo.</li>
+         <li>Role e escolha <b>Adicionar à Tela de Início</b>.</li>
+         <li>Confirme em <b>Adicionar</b> — o ícone aparece junto dos outros apps.</li>
+       </ol>`
+    : `<ol class="ios-steps">
+         <li>Toque no menu <b>⋮</b> do navegador (canto superior direito).</li>
+         <li>Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li>
+         <li>Confirme — o atalho aparece junto dos outros apps.</li>
+       </ol>`;
+  document.getElementById('modalInstall').classList.add('on');
+}
+
+// ─── SERVICE WORKER / OFFLINE ────────────────────────────────────────────────
+async function registerSW() {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    const reg = await navigator.serviceWorker.register('sw.js');
+    await navigator.serviceWorker.ready;
+    reg.update().catch(()=>{});
+    return reg;
+  } catch(_) { return null; }
+}
+
+// Conversa com o SW por MessageChannel: a lista de arquivos vive só no sw.js.
+function swAsk(type, onProgress) {
+  return new Promise((res, rej) => {
+    const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!sw) return rej(new Error('service worker ainda não ativo — recarregue o app'));
+    const ch = new MessageChannel();
+    const to = setTimeout(() => rej(new Error('tempo esgotado')), 300000);
+    ch.port1.onmessage = ev => {
+      if (ev.data && ev.data.type === 'PROGRESS') { onProgress && onProgress(ev.data); return; }
+      clearTimeout(to); res(ev.data);
+    };
+    sw.postMessage({type}, [ch.port2]);
+  });
+}
+
+async function offlineStatus() {
+  const el = document.getElementById('offState');
+  try {
+    const s = await swAsk('CACHE_STATUS');
+    if (s.have >= s.total) {
+      el.className = 'off-state ok';
+      el.textContent = `✅ Pronto para uso offline (${s.have}/${s.total} arquivos guardados).`;
+    } else {
+      el.className = 'off-state warn';
+      el.textContent = `⚠ Faltam ${s.total - s.have} de ${s.total} arquivos. Toque em baixar com internet.`;
+    }
+  } catch(e) {
+    el.className = 'off-state warn';
+    el.textContent = '⚠ Não foi possível verificar: ' + e.message;
+  }
+}
+
+async function downloadOffline() {
+  if (!navigator.onLine) { toast('Conecte-se à internet para baixar.'); return; }
+  const btn = document.getElementById('btnDl');
+  const bar = document.getElementById('dlBar');
+  const fill= document.getElementById('dlFill');
+  const el  = document.getElementById('offState');
+
+  btn.disabled = true; btn.textContent = 'Baixando…';
+  bar.classList.add('on'); fill.style.width = '0';
+  try {
+    const r = await swAsk('PRECACHE_ALL', p => {
+      fill.style.width = Math.round(p.done / p.total * 100) + '%';
+      el.className = 'off-state';
+      el.textContent = `Baixando ${p.done}/${p.total}…`;
+    });
+    fill.style.width = '100%';
+    toast(r.fail ? `Concluído com ${r.fail} falha(s). Tente de novo.` : 'Tudo pronto para uso offline ✓', 4000);
+  } catch(e) {
+    toast('Falha ao baixar: ' + e.message, 5000);
+  }
+  btn.disabled = false; btn.textContent = '⬇ Baixar tudo para uso offline';
+  setTimeout(() => { bar.classList.remove('on'); fill.style.width = '0'; }, 800);
+  offlineStatus();
 }
 
 // ─── BOOT ────────────────────────────────────────────────────────────────────
+updInstallUI();
 init();
 </script>
 </body>

@@ -13,8 +13,9 @@
 
 const TZ    = 'America/Sao_Paulo';
 const ABA   = 'Registros';
-const COLS  = ['ID','Nome','Tipo','Data','Hora','Local','Latitude','Longitude','Chave'];
-const CHAVE = 9;   // coluna da chave de deduplicação (A=1 … I=9)
+const COLS  = ['ID','Nome','Tipo','Data','Hora','Local','Latitude','Longitude','Precisão (m)','Chave'];
+const PREC  = 9;   // raio de erro do GPS informado pelo aparelho (A=1 … I=9)
+const CHAVE = 10;  // coluna da chave de deduplicação, oculta (J=10)
 
 function doPost(e) {
   // O app reenvia tudo que ainda não foi confirmado. Se dois envios chegarem
@@ -46,6 +47,7 @@ function doPost(e) {
         r.locationName,
         r.lat != null ? r.lat : '',
         r.lon != null ? r.lon : '',
+        r.accuracy != null ? r.accuracy : '',
         chave
       ]);
     });
@@ -73,13 +75,21 @@ function getSheet_() {
   let sheet = ss.getSheetByName(ABA);
   if (!sheet) {
     sheet = ss.insertSheet(ABA);
-    sheet.appendRow(COLS);
+    sheet.getRange(1, 1, 1, COLS.length).setValues([COLS]);
     sheet.setFrozenRows(1);
     sheet.hideColumns(CHAVE);          // a chave é uso interno, não polui a vista
     return sheet;
   }
-  // Planilha da versão antiga (8 colunas): completa o cabeçalho da Chave.
-  if (sheet.getRange(1, CHAVE).getValue() !== COLS[CHAVE - 1]) {
+
+  // Planilha do layout de 9 colunas (Chave na I, sem Precisão): abre espaço na I.
+  // insertColumnBefore arrasta a coluna Chave inteira — COM os dados — para a J,
+  // então as chaves já gravadas continuam valendo e nada volta em duplicata.
+  if (sheet.getRange(1, PREC).getValue() === 'Chave') sheet.insertColumnBefore(PREC);
+
+  // Cabeçalho fora do padrão (planilha antiga de 8 colunas, ou a migração acima
+  // que deixou a I sem título): reescreve a linha 1 inteira.
+  const atual = sheet.getRange(1, 1, 1, COLS.length).getValues()[0];
+  if (atual.join('|') !== COLS.join('|')) {
     sheet.getRange(1, 1, 1, COLS.length).setValues([COLS]);
     sheet.setFrozenRows(1);
     sheet.hideColumns(CHAVE);
