@@ -59,6 +59,11 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .btn-punch.entry{background:var(--green)}
 .btn-punch.exit{background:var(--red)}
 .btn-punch:not(:disabled):active{opacity:.82;transform:scale(.98)}
+/* Registro liberado sem coordenadas: cor de alerta, nunca a de "tudo certo". */
+.btn-punch.nogeo{background:#B45309}
+.geo-warn{display:none;background:#FEF3C7;border:1px solid #FCD34D;color:#78350F;
+  font-size:.78rem;line-height:1.45;border-radius:9px;padding:8px 10px;margin-bottom:9px}
+.geo-warn.on{display:block}
 
 /* ---- TOAST ---- */
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1E293B;color:#fff;padding:10px 22px;border-radius:10px;font-size:.88rem;z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center}
@@ -217,6 +222,10 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
     <div class="punch-row">
       <div class="clock" id="clock">--:--:--</div>
       <div class="date-txt" id="dateTxt"></div>
+    </div>
+    <div class="geo-warn" id="geoWarn">
+      ⚠️ <b>Sem rede e sem localização.</b> O ponto será registrado <b>sem coordenadas</b> —
+      o horário e o local configurado continuam valendo.
     </div>
     <button class="btn-punch" id="btnPunch" disabled onclick="doPunch()">
       Aguardando rosto…
@@ -581,6 +590,8 @@ function watchNetwork() {
     const on = navigator.onLine;
     dot.className  = 'dot'+(on?'':' off');
     label.textContent = on ? 'Online' : 'Sem conexão';
+    netAt = 0;                    // rede mudou: o veredito guardado não vale mais
+    if (!geoOk && geoErr) classificaFalha();  // pode ter virado bloqueio ou liberação
     if (on) syncNow(true);
   }
   upd();
@@ -691,18 +702,37 @@ async function detectOnce() {
   setPunchBtn(null, users.length ? 'Rosto não reconhecido' : 'Cadastre funcionários no Admin');
 }
 
-// ─── LOCALIZAÇÃO — OBRIGATÓRIA PARA REGISTRAR ────────────────────────────────
-// Sem posição válida e recente o botão fica travado e o modal central sobe.
-// O que o navegador entrega é sempre o serviço de localização do sistema: se o
-// usuário desliga a localização do aparelho, vem POSITION_UNAVAILABLE (code 2).
+// ─── LOCALIZAÇÃO ─────────────────────────────────────────────────────────────
+// Sem localização o ponto é bloqueado — MENOS quando o aparelho também está
+// fora de rede. Fora de cobertura não dá para distinguir "localização desligada
+// de propósito" de "aparelho sem como se situar", e travar o funcionário no
+// meio do campo é pior do que aceitar um registro sem coordenadas. Com rede,
+// "sem localização" é decisão de quem está com o aparelho na mão — aí trava.
+//
+//   fix válido                  → registra com coordenadas
+//   sem fix, permissão negada   → BLOQUEIA, mesmo sem rede: é ato deliberado e
+//                                 quem está com o aparelho resolve sozinho,
+//                                 sem depender de sinal nenhum
+//   sem fix, COM rede           → BLOQUEIA
+//   sem fix e SEM rede          → registra sem coordenadas, avisando na tela
+//
+// O navegador não diz "a localização do sistema está desligada": POSITION_-
+// UNAVAILABLE (code 2) cobre tanto isso quanto "ligada, mas sem conseguir
+// fixar". Quem separa os dois é a rede — daí a sondagem de temRede().
 const GEO_MAX_AGE   = 90000;   // idade máxima de um fix para valer como "ligada"
 const GEO_HEARTBEAT = 25000;   // de quanto em quanto tempo reconfirmamos
+const NET_PROBE_MS  = 4500;    // paciência com a sondagem de rede
+const NET_CACHE_MS  = 30000;   // validade do veredito de rede
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 let geoOk   = false;
 let geoLast = 0;      // instante do último fix aceito
 let geoErr  = null;   // último GeolocationPositionError
+let semRede = false;  // sem fix E confirmado fora de rede → registro liberado
+
+// A única pergunta que o resto do app faz.
+const podeRegistrar = () => geoOk || semRede;
 
 function startGeo() {
   if (!('geolocation' in navigator)) {
@@ -725,23 +755,73 @@ function startGeo() {
 }
 
 function onGeoOk(pos) {
-  geoOk = true; geoLast = Date.now(); geoErr = null;
+  geoOk = true; geoLast = Date.now(); geoErr = null; semRede = false;
   hideGpsModal();
+  showGeoWarn(false);
 }
 
 function onGeoErr(err) {
   geoErr = err;
-  // Permissão negada trava na hora; falha de sinal só depois que o último fix envelhece.
-  if (err.code === 1 || Date.now() - geoLast > GEO_MAX_AGE) {
-    geoOk = false;
-    showGpsModal();
+  // Permissão negada vale na hora; falha de sinal só depois que o fix envelhece.
+  if (err.code !== 1 && Date.now() - geoLast <= GEO_MAX_AGE) return;
+  geoOk = false;
+  classificaFalha();
+}
+
+// Decide entre travar e liberar sem coordenadas. Assíncrona porque depende de
+// confirmar a rede.
+let classificando = false;
+async function classificaFalha() {
+  if (classificando) return;      // o watch erra em rajada; uma sondagem basta
+  classificando = true;
+  try {
+    semRede = geoErr && geoErr.code === 1 ? false : !(await temRede());
+    if (geoOk) return;            // a localização voltou durante a sondagem
+    if (semRede) { hideGpsModal(); showGeoWarn(true); }
+    else         { showGeoWarn(false); showGpsModal(); }
+  } finally {
+    classificando = false;
+    if (curMatch) setPunchBtn(curMatch);
   }
+}
+
+// navigator.onLine mente: continua true em Wi-Fi sem internet e em rede de
+// operadora que não trafega. Como um falso "tem rede" impede alguém de bater o
+// ponto, confirmamos com uma ida real à rede antes de bloquear.
+let netAt = 0, netVerdict = true;
+async function temRede() {
+  const c = navigator.connection;
+  if (navigator.onLine === false || (c && (c.type === 'none' || c.downlink === 0))) {
+    netAt = Date.now(); netVerdict = false;
+    return false;                 // negativa do navegador é confiável
+  }
+  if (Date.now() - netAt < NET_CACHE_MS) return netVerdict;
+
+  const url = await getCfg('webhook','');
+  if (!url) return true;          // sem endpoint para sondar, fica no que o navegador diz
+  let ok = false;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), NET_PROBE_MS);
+    // no-cors: só interessa se a requisição chegou à rede, não o conteúdo.
+    // O sw.js não intercepta script.google.com, então isto nunca vem do cache.
+    await fetch(url, {method:'GET', mode:'no-cors', cache:'no-store', signal:ctrl.signal});
+    clearTimeout(t);
+    ok = true;
+  } catch(_) { ok = false; }
+  netAt = Date.now(); netVerdict = ok;
+  return ok;
+}
+
+function showGeoWarn(on) {
+  const el = document.getElementById('geoWarn');
+  if (el) el.classList.toggle('on', !!on);
 }
 
 async function geoHeartbeat() {
   try { onGeoOk(await geoOnce({enableHighAccuracy:false, timeout:12000, maximumAge:GEO_MAX_AGE})); }
   catch(e) { onGeoErr(e); }
-  if (geoOk && Date.now() - geoLast > GEO_MAX_AGE) { geoOk = false; showGpsModal(); }
+  if (geoOk && Date.now() - geoLast > GEO_MAX_AGE) { geoOk = false; classificaFalha(); }
 }
 
 const geoOnce = opts => new Promise((res,rej) =>
@@ -823,7 +903,7 @@ async function setPunchBtn(match, msg='Aguardando rosto…') {
     btn.className = 'btn-punch';
     return;
   }
-  if (!geoOk) {                               // trava dura: sem localização, sem ponto
+  if (!podeRegistrar()) {                     // trava dura: sem localização, sem ponto
     btn.disabled = true;
     btn.className = 'btn-punch';
     btn.textContent = '📍 Ative a localização';
@@ -831,8 +911,14 @@ async function setPunchBtn(match, msg='Aguardando rosto…') {
   }
   const type   = await nextType(match.name);
   btn.disabled = false;
-  btn.className= 'btn-punch '+(type==='entry'?'entry':'exit');
-  btn.textContent = (type==='entry'?'✅ Registrar Entrada':'🔴 Registrar Saída')+' — '+match.name;
+  if (geoOk) {
+    btn.className= 'btn-punch '+(type==='entry'?'entry':'exit');
+    btn.textContent = (type==='entry'?'✅ Registrar Entrada':'🔴 Registrar Saída')+' — '+match.name;
+  } else {
+    // Liberado só por estar fora de rede: cor de alerta, para não passar por normal.
+    btn.className= 'btn-punch nogeo';
+    btn.textContent = (type==='entry'?'Registrar Entrada':'Registrar Saída')+' sem localização — '+match.name;
+  }
 }
 
 async function nextType(name) {
@@ -847,7 +933,7 @@ async function nextType(name) {
 
 async function doPunch() {
   if (!curMatch || punching || Date.now() < coolUntil) return;
-  if (!geoOk) { showGpsModal(); return; }
+  if (!podeRegistrar()) { showGpsModal(); return; }
 
   punching = true;
   const name = curMatch.name;
@@ -858,15 +944,22 @@ async function doPunch() {
     // A posição é lida AGORA, na hora do registro — não vale reaproveitar o
     // fix do watch, que pode ser de minutos atrás e de outro lugar.
     btn.textContent = '📍 Obtendo localização…';
-    let pos;
+    let pos = null;
     try {
       pos = await getFreshPosition(12000);
       onGeoOk(pos);
     } catch(err) {
-      onGeoErr(err);
-      showGpsModal();
-      toast('Localização indisponível — ponto NÃO registrado.', 5000);
-      return;
+      geoErr = err; geoOk = false;
+      // A última palavra é aqui, não no estado que a tela mostrava: só passa sem
+      // coordenadas se der para confirmar, neste instante, que não há rede.
+      netAt = 0;                              // veredito guardado não serve para isto
+      semRede = !(err && err.code === 1) && !(await temRede());
+      if (!semRede) {
+        showGpsModal();
+        toast('Localização indisponível — ponto NÃO registrado.', 5000);
+        return;
+      }
+      showGeoWarn(true);
     }
 
     const type  = await nextType(name);
@@ -876,13 +969,16 @@ async function doPunch() {
       type,
       timestamp   : new Date().toISOString(),
       locationName: locNm,
-      lat         : +pos.coords.latitude.toFixed(6),
-      lon         : +pos.coords.longitude.toFixed(6),
-      accuracy    : Math.round(pos.coords.accuracy),
+      lat         : pos ? +pos.coords.latitude.toFixed(6)  : null,
+      lon         : pos ? +pos.coords.longitude.toFixed(6) : null,
+      accuracy    : pos ? Math.round(pos.coords.accuracy)  : null,
+      semLocal    : !pos,                     // liberado por estar fora de rede
       synced      : false,
     });
 
-    toast(`${type==='entry'?'Entrada':'Saída'} registrada: ${name}`);
+    toast(pos
+      ? `${type==='entry'?'Entrada':'Saída'} registrada: ${name}`
+      : `${type==='entry'?'Entrada':'Saída'} registrada SEM localização: ${name}`, pos ? 3200 : 5000);
     coolUntil = Date.now() + PUNCH_COOLDOWN;
     updPending();
     if (navigator.onLine) syncNow(true);
@@ -951,7 +1047,8 @@ function goBack() {
   adminOpen = false;
   document.getElementById('vAdmin').classList.remove('active');
   document.getElementById('vPunch').classList.add('active');
-  if (!geoOk) showGpsModal();   // de volta ao ponto, a trava vale de novo
+  if (!podeRegistrar()) showGpsModal();   // de volta ao ponto, a trava vale de novo
+  showGeoWarn(!geoOk && semRede);
 }
 
 async function saveSettings() {
@@ -990,7 +1087,7 @@ async function renderPlog() {
       <span class="plog-name">${esc(p.userName)}</span> —
       ${p.type==='entry'?'Entrada':'Saída'}
       <span class="plog-time"> · ${new Date(p.timestamp).toLocaleString('pt-BR')}</span>
-      <br><small>${esc(p.locationName)}</small>
+      <br><small>${esc(p.locationName)}${p.lat==null?' · <b>sem localização</b>':''}</small>
     </div>`).join('');
 }
 

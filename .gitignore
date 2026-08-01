@@ -7,3 +7,4 @@ agendar_sync_ponto.bat
 logs/
 desktop.ini
 .claude/
+node_modules/
