@@ -217,7 +217,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         Mostre o polegar para cima
         <small>ou toque no botão verde abaixo</small>
       </div>
-      <div class="co-live" id="coLive">👁 Pisque ou mexa a cabeça</div>
+      <div class="co-live" id="coLive">👁 Pisque, abra a boca ou mexa a cabeça</div>
       <div class="co-timer" id="coTimer"></div>
     </div>
 
@@ -529,6 +529,28 @@ const LIVE_YAW_ALFA   =  0.30;
 const LIVE_YAW_JANELA =    24;  // leituras (~3s a 130ms)
 const LIVE_TIMEOUT    =  4000;  // só vale quando NÃO se consegue medir nada
 
+// (c) ABRIR A BOCA — o canal que funciona com óculos.
+// Relatado em campo: quem usa óculos ficava travado. A armação prende os
+// landmarks da pálpebra, o EAR não chega perto de 0,19 e a piscada NUNCA é
+// detectada; sobrava só o giro de cabeça, cujo limiar é apertado. A boca não tem
+// esse problema e o sinal é uma ordem de grandeza maior que o ruído.
+// Mesmo mecanismo do yaw — média móvel + janela deslizante —, e pela mesma razão:
+// medido no cru, o tremor de landmark se ACUMULA no min/max e uma foto tremendo
+// atinge 0,347 em 20 s. Suavizado e em janela de ~3 s, cai para 0,119.
+// Amplitude, e não desvio de uma linha de base: assim a foto de alguém DE BOCA
+// ABERTA parada vale zero — o que conta é a mudança, não o estado.
+const LIVE_MAR_ABRE   =  0.25;  // amplitude de abertura da boca que libera
+const LIVE_MAR_ALFA   =  0.30;
+const LIVE_MAR_JANELA =    24;
+
+// Sem isto o funcionário fica TRANCADO: `confirmPunch` exige vivacidade, então
+// quem não consegue produzir nenhuma das três evidências não registra nem pelo
+// botão — foi o que aconteceu em campo (4 tentativas até conseguir). Passado este
+// tempo COM leituras válidas, o botão volta a funcionar e o registro vai para a
+// planilha marcado como `nao confirmada`. O gesto 👍 continua exigindo prova de
+// vida: liberar por tempo é o escape do caso legítimo, não um caminho mãos-livres.
+const LIVE_ESCAPE     =  9000;  // ms até liberar o BOTÃO sem prova, marcando
+
 // ─── STATE ──────────────────────────────────────────────────────────────────
 let users     = [];
 let curMatch  = null;          // {name, dist, margem, box}
@@ -557,6 +579,10 @@ let liveLeituras= 0;           // quantas leituras válidas saíram (0 = câmera
 let liveOlhos   = 'aberto';    // máquina de estados da piscada
 let liveYaws    = [];          // últimas leituras de pose (janela deslizante)
 let liveYawSuave= null;        // média móvel do yaw (filtra tremor de landmark)
+let liveMars    = [];          // idem para a abertura da boca
+let liveMarSuave= null;
+let liveMotivo  = '';          // qual evidência liberou (vai para a planilha)
+let liveEscape  = false;       // janela esgotada: botão liberado, mas MARCADO
 
 let gestureRec   = null;
 let gestureOn    = true;
@@ -782,6 +808,18 @@ function ear(olho) {
   const larg = dist2(olho[0], olho[3]);
   if (!larg) return 1;
   return (dist2(olho[1], olho[5]) + dist2(olho[2], olho[4])) / (2 * larg);
+}
+
+// Mouth Aspect Ratio: abertura vertical da boca ÷ largura. Mesma ideia do EAR,
+// mas em landmarks que os óculos não atrapalham. getMouth() devolve os pontos
+// 48..67 nessa ordem, então 48→0 e 54→6 são os cantos, e (50,58) (51,57) (52,56)
+// → (2,10) (3,9) (4,8) são as três alturas do contorno externo.
+function mar(boca) {
+  if (boca.length < 11) return 0;
+  const larg = dist2(boca[0], boca[6]);
+  if (!larg) return 0;
+  return (dist2(boca[2], boca[10]) + dist2(boca[3], boca[9]) + dist2(boca[4], boca[8]))
+       / (3 * larg);
 }
 
 // Quanto o rosto está girado, medido só por geometria relativa: a ponta do nariz
@@ -1041,6 +1079,11 @@ function enterConfirm(match) {
   liveOlhos   = 'aberto';
   liveYaws    = [];
   liveYawSuave= null;
+  liveMars    = [];
+  liveMarSuave= null;
+  liveMotivo  = '';
+  liveEscape  = false;
+  document.getElementById('coLive').textContent = '👁 Pisque, abra a boca ou mexa a cabeça';
 
   document.getElementById('faceRing').classList.add('hidden');
   document.getElementById('nameBadge').style.display = 'none';
@@ -1069,6 +1112,17 @@ function tickConfirm() {
   document.getElementById('coTimer').textContent = `expira em ${Math.ceil(left/1000)}s`;
 
   tickLiveness();
+  dicaLiveness();
+
+  // Passado LIVE_ESCAPE com leituras válidas, o BOTÃO volta a funcionar — senão
+  // quem não produz nenhuma evidência fica trancado (ver LIVE_ESCAPE). O gesto,
+  // não: continua exigindo prova de vida.
+  if (!liveOk && !liveEscape && liveLeituras && liveFirstTs &&
+      Date.now() - liveFirstTs > LIVE_ESCAPE) {
+    liveEscape = true;
+    document.getElementById('btnPunch').textContent = '✔ CONFIRMAR SAÍDA (sem prova de vida)';
+  }
+
   if (!liveOk) return;              // sem prova de vida, nem o gesto vale
 
   if (!gestureOn || !gestureRec) return;
@@ -1182,6 +1236,17 @@ function tickLiveness() {
         const amp = Math.max.apply(null, liveYaws) - Math.min.apply(null, liveYaws);
         if (amp > LIVE_YAW_DELTA) { marcarVivo('movimento'); return; }
       }
+
+      // (c) Abrir a boca — o canal que sobra para quem usa óculos.
+      const m = mar(lm.getMouth());
+      if (m) {
+        liveMarSuave = liveMarSuave === null ? m
+                     : liveMarSuave + LIVE_MAR_ALFA * (m - liveMarSuave);
+        liveMars.push(liveMarSuave);
+        if (liveMars.length > LIVE_MAR_JANELA) liveMars.shift();
+        const ampB = Math.max.apply(null, liveMars) - Math.min.apply(null, liveMars);
+        if (ampB > LIVE_MAR_ABRE) { marcarVivo('boca'); return; }
+      }
     })
     .catch(() => { marcarVivo('indisponível'); })   // degrada como os gestos
     .finally(() => { liveBusy = false; });
@@ -1204,10 +1269,28 @@ function seguirRosto(box) {
   lastBox = { x:box.x, y:box.y, width:box.width, height:box.height };
 }
 
-function marcarVivo(_motivo) {
-  liveOk = true;
+function marcarVivo(motivo) {
+  liveOk     = true;
+  liveMotivo = motivo;
   const hint = document.getElementById('coLive');
   if (hint) hint.classList.remove('on');
+}
+
+// A dica muda com o tempo em vez de repetir a mesma frase por 20 s. A escalada
+// existe por um motivo concreto: "pisque" é inútil para quem usa óculos, e a
+// pessoa não tem como adivinhar sozinha qual das evidências o app consegue ler.
+// Aos 3 s ela passa a instruir a BOCA, que é a que funciona em qualquer caso.
+function dicaLiveness() {
+  const hint = document.getElementById('coLive');
+  if (!hint || liveOk) return;
+  const t = liveFirstTs ? Date.now() - liveFirstTs : 0;
+
+  if (liveEscape)   hint.textContent = '⚠ Sem prova de vida — use o botão verde';
+  else if (t > 3000) {
+    const falta = Math.ceil((LIVE_ESCAPE - t) / 1000);
+    hint.textContent = '😮 Abra bem a boca' + (falta > 0 ? ` · botão libera em ${falta}s` : '');
+  }
+  else hint.textContent = '👁 Pisque, abra a boca ou mexa a cabeça';
 }
 
 function cancelConfirm() {
@@ -1284,7 +1367,12 @@ async function confirmPunch(method) {
   if (mode !== 'confirming' || !curMatch) return;
 
   // Vale também para o botão: sem isso, bastaria segurar uma foto e tocar na tela.
-  if (!liveOk) { toast('Pisque ou mexa a cabeça para confirmar que é você.', 2500); return; }
+  // A exceção é o escape de LIVE_ESCAPE, que libera SÓ o botão e marca o registro
+  // — trancar um funcionário legítimo é pior que gravar um registro sinalizado.
+  if (!liveOk && !(liveEscape && method === 'botao')) {
+    toast('Abra a boca, pisque ou mexa a cabeça para confirmar que é você.', 2800);
+    return;
+  }
 
   const match = curMatch;
   mode = 'done';                       // trava o loop imediatamente (evita duplo registro)
@@ -1333,6 +1421,8 @@ async function confirmPunch(method) {
     dist         : match.dist   != null ? +match.dist.toFixed(3)   : null,
     margem       : match.margem != null ? +match.margem.toFixed(3) : null,
     rigor        : rigorNome,
+    // Auditável: se a vivacidade não foi provada, a planilha tem que dizer.
+    vivacidade   : liveOk ? (liveMotivo || 'ok') : 'nao confirmada',
     synced       : false,
   };
   await dbPut('punches', rec);

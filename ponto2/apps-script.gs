@@ -23,11 +23,13 @@ const ABA   = 'Saidas';
 // ela ali, e é por ela que a deduplicação reconhece um reenvio. Colunas novas
 // entram DEPOIS dela.
 const COLS  = ['ID','Nome','Tipo','Data','Hora','Local','Confirmacao',
-               'Latitude','Longitude','Chave','Foto','Distancia','Margem','Rigor','Conferido'];
+               'Latitude','Longitude','Chave','Foto','Distancia','Margem','Rigor',
+               'Conferido','Vivacidade'];
 const CHAVE = 10;   // coluna da chave de deduplicação (A=1 … J=10)
 const FOTO  = 11;   // coluna da miniatura
 const DIST  = 12;   // coluna da distância do reconhecimento
 const CONF  = 15;   // coluna da caixinha "conferido"
+const VIVO  = 16;   // como a vivacidade foi provada — 'nao confirmada' pede atenção
 
 // Acima desta distância o reconhecimento passou "raspando" — não está errado,
 // mas é onde o erro mora. A planilha destaca essas linhas para conferência.
@@ -80,7 +82,8 @@ function doPost(e) {
         r.dist   != null ? r.dist   : '',
         r.margem != null ? r.margem : '',
         r.rigor  || '',
-        false                              // Conferido — caixinha desmarcada
+        false,                             // Conferido — caixinha desmarcada
+        r.vivacidade || ''                 // piscada/boca/movimento ou 'nao confirmada'
       ]);
     });
 
@@ -106,9 +109,38 @@ function doGet() {
 }
 
 // Rode esta função uma vez no editor para conceder o acesso ao Drive.
+// ⚠ Ela precisa ABRIR a tela de consentimento do Google. Se rodar em silêncio e
+// a foto continuar falhando, a autorização não foi concedida a esta conta —
+// use diagnostico() para confirmar antes de mexer na implantação.
 function autorizar() {
   pastaFotos_();
   SpreadsheetApp.getActiveSpreadsheet().getName();
+}
+
+// Rode no editor e veja o resultado no Registro de execuções (Ctrl+Enter).
+// Responde de forma direta se a coluna Foto vai funcionar — sem ter que
+// registrar um ponto de verdade para descobrir.
+function diagnostico() {
+  const linhas = [];
+  linhas.push('Planilha: ' + SpreadsheetApp.getActiveSpreadsheet().getName());
+  linhas.push('Conta:    ' + (Session.getEffectiveUser().getEmail() || '(oculta)'));
+  try {
+    const pasta = pastaFotos_();
+    linhas.push('Drive:    OK — pasta "' + pasta.getName() + '" (' + pasta.getId() + ')');
+    const t = pasta.createFile(Utilities.newBlob('teste', 'text/plain', 'teste.txt'));
+    t.setTrashed(true);
+    linhas.push('Escrita:  OK — a coluna Foto vai funcionar.');
+  } catch (err) {
+    linhas.push('Drive:    FALHOU — ' + err.message);
+    linhas.push('');
+    linhas.push('A autorização do Drive NÃO está concedida para esta conta.');
+    linhas.push('No editor: selecione a função autorizar → ▶ Executar → aceite');
+    linhas.push('o acesso (se aparecer "O Google não verificou este app", clique');
+    linhas.push('em Avançado → Acessar <nome do projeto>). Depois rode isto de novo.');
+  }
+  const txt = linhas.join('\n');
+  Logger.log(txt);
+  return txt;
 }
 
 // ─── CONFERÊNCIA ─────────────────────────────────────────────────────────────
@@ -133,12 +165,12 @@ function formatar_(sheet) {
   if (faltamLinhas > 0) sheet.insertRowsAfter(sheet.getMaxRows(), faltamLinhas);
 
   const faixa  = sheet.getRange(2, 1, sheet.getMaxRows() - 1, COLS.length);
-  const colD   = colLetra_(DIST), colC = colLetra_(CONF);
+  const colD   = colLetra_(DIST), colC = colLetra_(CONF), colV = colLetra_(VIVO);
 
   // $ nas colunas para a regra pintar a LINHA inteira, não só a célula testada.
   const suspeito = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied('=AND($' + colD + '2<>"", $' + colD + '2>=' + DIST_REVISAO +
-                          ', NOT($' + colC + '2))')
+    .whenFormulaSatisfied('=AND(OR(AND($' + colD + '2<>"", $' + colD + '2>=' + DIST_REVISAO + '), ' +
+                          '$' + colV + '2="nao confirmada"), NOT($' + colC + '2))')
     .setBackground('#FFE8CC')
     .setRanges([faixa])
     .build();
@@ -162,8 +194,8 @@ function formatar_(sheet) {
   if (n > 0) sheet.getRange(2, CONF, n, 1).insertCheckboxes();
 
   SpreadsheetApp.getActive().toast(
-    'Linhas com Distancia ≥ ' + DIST_REVISAO + ' ficam em laranja até a caixinha ' +
-    '"Conferido" ser marcada.', 'Ponto Saída', 8);
+    'Ficam em laranja, até a caixinha "Conferido" ser marcada: Distancia ≥ ' +
+    DIST_REVISAO + ' e Vivacidade = "nao confirmada".', 'Ponto Saída', 8);
 }
 
 function resumoConferencia() {
@@ -172,16 +204,19 @@ function resumoConferencia() {
   if (n < 1) { SpreadsheetApp.getActive().toast('Nenhum registro ainda.', 'Ponto Saída', 5); return; }
 
   const dados = sheet.getRange(2, 1, n, COLS.length).getValues();
-  let suspeitos = 0, pendentes = 0;
+  let raspou = 0, semVida = 0, pendentes = 0;
   dados.forEach(function (l) {
     const d = l[DIST - 1];
-    if (d === '' || d === null || d < DIST_REVISAO) return;
-    suspeitos++;
-    if (l[CONF - 1] !== true) pendentes++;
+    const perto = d !== '' && d !== null && d >= DIST_REVISAO;
+    const vivo  = String(l[VIVO - 1]) === 'nao confirmada';
+    if (perto)  raspou++;
+    if (vivo)   semVida++;
+    if ((perto || vivo) && l[CONF - 1] !== true) pendentes++;
   });
 
   SpreadsheetApp.getActive().toast(
-    suspeitos + ' registro(s) com Distancia ≥ ' + DIST_REVISAO + '. ' +
+    raspou + ' com Distancia ≥ ' + DIST_REVISAO + ' · ' +
+    semVida + ' sem prova de vida · ' +
     pendentes + ' ainda sem conferir.', 'Ponto Saída', 10);
 }
 
@@ -215,14 +250,29 @@ function celulaFoto_(dataUrl, nome, dt) {
 
   } catch (err) {
     // Sem permissão do Drive ou cota estourada: o ponto não pode deixar de ser
-    // registrado por causa da foto.
-    return 'erro: ' + err.message;
+    // registrado por causa da foto. A mensagem do Google tem 200 caracteres de
+    // link e jargão — na célula cabe o que dá para AGIR.
+    const msg = String(err && err.message);
+    if (/permission|autoriza|scope/i.test(msg)) {
+      return 'sem permissão do Drive — rode a função autorizar() no editor';
+    }
+    return 'erro: ' + msg;
   }
 }
 
+// O id fica guardado nas Propriedades do Script: além de evitar uma busca no
+// Drive a cada registro, impede que uma segunda pasta de mesmo nome (criada à
+// mão, ou por outra planilha) passe a receber as fotos.
 function pastaFotos_() {
+  const props = PropertiesService.getScriptProperties();
+  const id    = props.getProperty('FOTO_PASTA_ID');
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (_) { /* apagada: recria */ }
+  }
   const achou = DriveApp.getFoldersByName(FOTO_PASTA);
-  return achou.hasNext() ? achou.next() : DriveApp.createFolder(FOTO_PASTA);
+  const pasta = achou.hasNext() ? achou.next() : DriveApp.createFolder(FOTO_PASTA);
+  props.setProperty('FOTO_PASTA_ID', pasta.getId());
+  return pasta;
 }
 
 // ─── PLANILHA ────────────────────────────────────────────────────────────────

@@ -131,11 +131,20 @@ ninguém).
 ## Prova de vida
 
 Impede confirmar o ponto segurando uma foto impressa ou a tela de outro celular.
-Durante a janela de confirmação o app procura **duas evidências independentes** —
+Durante a janela de confirmação o app procura **três evidências independentes** —
 basta uma:
 
 - **piscada** — o olho precisa fechar *e* abrir de novo (Eye Aspect Ratio);
+- **abrir a boca** — amplitude de abertura acima de 0,25 (Mouth Aspect Ratio);
 - **movimento de cabeça** — amplitude de pose acima de 0,18.
+
+> ⚠ **Quem usa óculos precisa da boca.** Testado em campo: a armação prende os
+> landmarks da pálpebra, o EAR não chega perto de 0,19 e a piscada **nunca** é
+> detectada — sobrava só o giro de cabeça, cujo limiar é apertado. Por isso a
+> dica na tela muda aos 3 s de *"pisque"* para **"😮 Abra bem a boca"**: a pessoa
+> não tem como adivinhar qual evidência o app consegue ler no rosto dela.
+> O reconhecimento em si funciona normalmente com óculos — o que travava era só
+> a prova de vida.
 
 A pose é medida por geometria relativa (a ponta do nariz equidistante dos olhos),
 que é **invariante a posição e escala**: tremer a mão segurando uma foto não
@@ -147,10 +156,30 @@ Testado em simulação com landmarks sintéticos (7 cenários): foto parada, fot
 tremendo e tremor extremo ficam em 0,024 / 0,089 / 0,160 — todos abaixo do
 limiar; piscada e giro de cabeça liberam em 1–3 s.
 
-> Se a câmera não conseguir medir nada (contraluz, rosto fora do quadro), libera
-> sozinha em 4 s. Esse escape vale **só para ausência de leitura** — enquanto
-> houver medição válida não há liberação por tempo, senão bastaria segurar uma
-> foto parada e esperar.
+A abertura de boca passa pelo **mesmo tratamento do movimento de cabeça** — média
+móvel e janela deslizante de ~3 s — e pela mesma razão: medido no cru, o tremor
+de landmark se acumula no min/max e uma foto tremendo atinge 0,347 em 20 s.
+Suavizado e em janela, cai para **0,119**, contra **0,427** de uma boca aberta de
+verdade. É a amplitude que conta, não o estado: a foto de alguém **de boca
+aberta**, parada, vale zero.
+
+### Os dois escapes (e por que não são o mesmo)
+
+| Situação | O que acontece |
+|---|---|
+| A câmera não mede **nada** (contraluz, rosto fora do quadro) | libera tudo em 4 s |
+| Mede, mas **nenhuma evidência aparece** em 9 s | libera **só o botão**, e marca o registro |
+
+O primeiro existe porque insistir seria travar alguém por limitação da câmera. O
+segundo existe porque, sem ele, **o funcionário fica trancado**: a confirmação
+exige vivacidade *também no botão*, então quem não produz nenhuma das três
+evidências não registra de jeito nenhum — foi exatamente o que aconteceu em campo
+antes da boca entrar (quatro tentativas até conseguir).
+
+O gesto 👍 **continua exigindo prova de vida** nos dois casos: liberar por tempo é
+o escape do caso legítimo, não um caminho mãos-livres. E o registro liberado pelo
+segundo escape vai para a planilha com `Vivacidade = nao confirmada`, que a rotina
+de conferência pinta de laranja.
 
 Não substitui antifraude de verdade: barra o caso casual (foto no celular),
 não um ataque dedicado. Desligável em **Admin → Configurações**.
@@ -160,9 +189,9 @@ não um ataque dedicado. Desligável em **Admin → Configurações**.
 Nenhum reconhecimento é infalível — então o app guarda a prova. A cada saída
 confirmada ele recorta uma **miniatura 200×200 do rosto** e envia junto do
 registro. O Apps Script salva o arquivo numa pasta do Drive
-(`Ponto Saida - Fotos`) e põe a imagem na coluna `Foto` da planilha, ao lado das
-colunas `Distancia`, `Margem` e `Rigor` — dá para achar registros "no limite" e
-corrigir o cadastro.
+(`Ponto Saida - Fotos`) e põe a imagem na coluna `Foto` (**K**) da planilha, ao
+lado de `Distancia`, `Margem`, `Rigor`, `Conferido` e `Vivacidade` — dá para
+achar registros "no limite" e corrigir o cadastro.
 
 A foto é capturada **antes** da leitura de GPS (a pessoa ainda está enquadrada),
 funciona offline (fica no IndexedDB) e é **apagada do aparelho** assim que
@@ -170,7 +199,15 @@ sincroniza. Pode ser desligada em **Admin → Configurações**.
 
 > ⚠ Exige **reautorizar o Apps Script**: ao reimplantar, abra o editor, execute a
 > função `autorizar` uma vez e aceite o acesso ao Google Drive. Sem isso os
-> registros continuam entrando, só que sem foto.
+> registros continuam entrando, só que a coluna Foto vem
+> `sem permissão do Drive — rode a função autorizar() no editor`.
+>
+> Se a tela de consentimento mostrar *"O Google não verificou este app"*, é
+> preciso clicar em **Avançado → Acessar `<nome do projeto>`** — fechar essa tela
+> não concede nada, e o sintoma é idêntico ao de não ter rodado a função.
+> Para conferir sem precisar registrar um ponto de verdade, rode **`diagnostico()`**
+> no editor: ele diz em qual conta está, se o Drive responde e se a escrita
+> funciona.
 >
 > Em `apps-script.gs`, `FOTO_PUBLICA = true` faz a imagem aparecer dentro da
 > célula (cada arquivo vira "qualquer pessoa com o link"). Com `false` a foto
@@ -180,12 +217,12 @@ sincroniza. Pode ser desligada em **Admin → Configurações**.
 
 A foto só serve se alguém olhar. A planilha ganha um menu **Ponto Saída**:
 
-- **Destacar registros a conferir** — pinta de laranja toda linha com
-  `Distancia ≥ 0,40` (reconhecimento que passou raspando) que ainda não foi
-  conferida, e verde quando a caixinha `Conferido` é marcada. A regra fica
-  gravada e vale para as linhas futuras — roda uma vez só.
-- **Quantos faltam conferir?** — quantos registros estão na faixa de risco e
-  quantos ainda não foram olhados.
+- **Destacar registros a conferir** — pinta de laranja toda linha ainda não
+  conferida que tenha `Distancia ≥ 0,40` (reconhecimento que passou raspando)
+  **ou** `Vivacidade = nao confirmada`, e verde quando a caixinha `Conferido` é
+  marcada. A regra fica gravada e vale para as linhas futuras — roda uma vez só.
+- **Quantos faltam conferir?** — quantos passaram raspando, quantos foram sem
+  prova de vida e quantos ainda não foram olhados.
 
 Assim o erro deixa de ser invisível: em vez de auditar tudo, olha-se a foto das
 poucas linhas laranja.
