@@ -62,10 +62,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 /* Registro liberado sem coordenadas: cor de alerta, nunca a de "tudo certo". */
 .btn-punch.nogeo{background:#B45309}
 .geo-warn{display:none;background:#FEF3C7;border:1px solid #FCD34D;color:#78350F;
-  font-size:.78rem;line-height:1.45;border-radius:9px;padding:8px 10px;margin-bottom:9px;
-  cursor:pointer}
+  font-size:.78rem;line-height:1.45;border-radius:9px;padding:8px 10px;margin-bottom:9px}
 .geo-warn.on{display:block}
-.geo-warn u{text-underline-offset:2px}
 
 /* ---- TOAST ---- */
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1E293B;color:#fff;padding:10px 22px;border-radius:10px;font-size:.88rem;z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center}
@@ -225,10 +223,9 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       <div class="clock" id="clock">--:--:--</div>
       <div class="date-txt" id="dateTxt"></div>
     </div>
-    <div class="geo-warn" id="geoWarn" onclick="showGpsModal(null,false,true)">
-      ⚠️ <b>Sem localização.</b> O ponto será registrado <b>sem coordenadas</b> —
+    <div class="geo-warn" id="geoWarn">
+      ⚠️ <b>Sem rede e sem localização.</b> O ponto será registrado <b>sem coordenadas</b> —
       o horário e o local configurado continuam valendo.
-      <u>Toque para tentar ativar.</u>
     </div>
     <button class="btn-punch" id="btnPunch" disabled onclick="doPunch()">
       Aguardando rosto…
@@ -357,16 +354,16 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
   </div>
 </div>
 
-<!-- ========== MODAL: Localização (aviso, NÃO bloqueia o registro) ========== -->
+<!-- ========== MODAL: Localização obrigatória ========== -->
 <div class="gps-bg" id="gpsModal">
   <div class="gps-box">
     <div class="gps-icon">📍</div>
     <div class="gps-title" id="gpsTitle">Localização desligada</div>
     <p class="gps-txt" id="gpsTxt">
+      O registro de ponto exige a localização ligada.
       Ative o GPS do aparelho e toque no botão abaixo.
     </p>
     <button class="btn btn-blue btn-full" id="gpsBtn" onclick="requestGeo(true)">Ativar localização</button>
-    <button class="btn btn-gray btn-full" id="gpsSkip" onclick="dispensaGps()">Continuar sem localização</button>
     <div class="gps-help" id="gpsHelp"></div>
   </div>
 </div>
@@ -629,6 +626,8 @@ function watchNetwork() {
     const on = navigator.onLine;
     dot.className  = 'dot'+(on?'':' off');
     label.textContent = on ? 'Online' : 'Sem conexão';
+    netAt = 0;                    // rede mudou: o veredito guardado não vale mais
+    if (!geoOk && geoErr) classificaFalha();  // pode ter virado bloqueio ou liberação
     if (on) syncNow(true);
   }
   upd();
@@ -742,41 +741,41 @@ async function detectOnce() {
 }
 
 // ─── LOCALIZAÇÃO ─────────────────────────────────────────────────────────────
-// Política vigente (atualizacao.md, 03/08/2026): a localização é COBRADA, nunca
-// exigida. O registro de ponto NÃO é bloqueado em nenhuma hipótese — havendo ou
-// não sinal, a tela de registro fica liberada.
+// Sem localização o ponto é bloqueado — MENOS quando o aparelho também está
+// fora de rede. Fora de cobertura não dá para distinguir "localização desligada
+// de propósito" de "aparelho sem como se situar", e travar o funcionário no
+// meio do campo é pior do que aceitar um registro sem coordenadas. Com rede,
+// "sem localização" é decisão de quem está com o aparelho na mão — aí trava.
 //
-//   fix válido   → registra COM coordenadas, botão na cor normal
-//   sem fix      → registra SEM coordenadas, botão na cor de alerta, faixa
-//                  amarela na tela e `semLocal:true` no banco. Vale para
-//                  qualquer motivo: GPS desligado, permissão negada, sem sinal.
-//
-// Por que mudou: a trava anterior separava "desligado de propósito" de "sem
-// como se situar" sondando a rede (temRede/semRede). Isso deixava o funcionário
-// preso na tela em zona morta com Wi-Fi fantasma — e a informação que importa
-// (quem bateu, quando, em que local configurado) já está no registro. Sem
-// coordenadas o ponto vale menos, então a falta fica CARIMBADA no registro e
-// visível na tela, em vez de impedir o trabalho.
+//   fix válido                  → registra com coordenadas
+//   sem fix, permissão negada   → BLOQUEIA, mesmo sem rede: é ato deliberado e
+//                                 quem está com o aparelho resolve sozinho,
+//                                 sem depender de sinal nenhum
+//   sem fix, COM rede           → BLOQUEIA
+//   sem fix e SEM rede          → registra sem coordenadas, avisando na tela
 //
 // O navegador não diz "a localização do sistema está desligada": POSITION_-
 // UNAVAILABLE (code 2) cobre tanto isso quanto "ligada, mas sem conseguir
-// fixar". Como nenhum dos dois bloqueia mais nada, não precisamos distinguir —
-// só o code 1 (permissão negada) muda o texto da ajuda.
+// fixar". Quem separa os dois é a rede — daí a sondagem de temRede().
 const GEO_MAX_AGE   = 90000;   // idade máxima de um fix para valer como "ligada"
 const GEO_HEARTBEAT = 25000;   // de quanto em quanto tempo reconfirmamos
+const NET_PROBE_MS  = 4500;    // paciência com a sondagem de rede
+const NET_CACHE_MS  = 30000;   // validade do veredito de rede
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-let geoOk    = false;
-let geoLast  = 0;      // instante do último fix aceito
-let geoErr   = null;   // último GeolocationPositionError
-let gpsAviso = false;  // o modal já foi mostrado e dispensado neste episódio
+let geoOk   = false;
+let geoLast = 0;      // instante do último fix aceito
+let geoErr  = null;   // último GeolocationPositionError
+let semRede = false;  // sem fix E confirmado fora de rede → registro liberado
+
+// A única pergunta que o resto do app faz.
+const podeRegistrar = () => geoOk || semRede;
 
 function startGeo() {
   if (!('geolocation' in navigator)) {
     geoOk = false;
-    showGeoWarn(true);
-    showGpsModal('Este navegador não expõe a localização. Use o Chrome (Android) ou o Safari (iPhone). O ponto continua sendo registrado, sem coordenadas.', true);
+    showGpsModal('Este navegador não expõe a localização. Use o Chrome (Android) ou o Safari (iPhone).', true);
     return;
   }
   // Avisa quando a permissão muda por fora do app (Android/Chrome).
@@ -794,12 +793,9 @@ function startGeo() {
 }
 
 function onGeoOk(pos) {
-  const voltou = !geoOk;
-  geoOk = true; geoLast = Date.now(); geoErr = null;
-  if (voltou) gpsAviso = false;   // se cair de novo, avisa de novo — uma vez
+  geoOk = true; geoLast = Date.now(); geoErr = null; semRede = false;
   hideGpsModal();
   showGeoWarn(false);
-  if (curMatch) setPunchBtn(curMatch);
 }
 
 function onGeoErr(err) {
@@ -807,16 +803,52 @@ function onGeoErr(err) {
   // Permissão negada vale na hora; falha de sinal só depois que o fix envelhece.
   if (err.code !== 1 && Date.now() - geoLast <= GEO_MAX_AGE) return;
   geoOk = false;
-  avisaSemGeo();
+  classificaFalha();
 }
 
-// Sem localização: avisa e libera. O modal sobe UMA vez por episódio — quem
-// dispensou não é interrompido de novo a cada batida do heartbeat; a faixa
-// amarela fica na tela e reabre o modal se a pessoa quiser tentar.
-function avisaSemGeo() {
-  showGeoWarn(true);
-  if (!gpsAviso) showGpsModal();
-  if (curMatch) setPunchBtn(curMatch);
+// Decide entre travar e liberar sem coordenadas. Assíncrona porque depende de
+// confirmar a rede.
+let classificando = false;
+async function classificaFalha() {
+  if (classificando) return;      // o watch erra em rajada; uma sondagem basta
+  classificando = true;
+  try {
+    semRede = geoErr && geoErr.code === 1 ? false : !(await temRede());
+    if (geoOk) return;            // a localização voltou durante a sondagem
+    if (semRede) { hideGpsModal(); showGeoWarn(true); }
+    else         { showGeoWarn(false); showGpsModal(); }
+  } finally {
+    classificando = false;
+    if (curMatch) setPunchBtn(curMatch);
+  }
+}
+
+// navigator.onLine mente: continua true em Wi-Fi sem internet e em rede de
+// operadora que não trafega. Como um falso "tem rede" impede alguém de bater o
+// ponto, confirmamos com uma ida real à rede antes de bloquear.
+let netAt = 0, netVerdict = true;
+async function temRede() {
+  const c = navigator.connection;
+  if (navigator.onLine === false || (c && (c.type === 'none' || c.downlink === 0))) {
+    netAt = Date.now(); netVerdict = false;
+    return false;                 // negativa do navegador é confiável
+  }
+  if (Date.now() - netAt < NET_CACHE_MS) return netVerdict;
+
+  const url = await getCfg('webhook','');
+  if (!url) return true;          // sem endpoint para sondar, fica no que o navegador diz
+  let ok = false;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), NET_PROBE_MS);
+    // no-cors: só interessa se a requisição chegou à rede, não o conteúdo.
+    // O sw.js não intercepta script.google.com, então isto nunca vem do cache.
+    await fetch(url, {method:'GET', mode:'no-cors', cache:'no-store', signal:ctrl.signal});
+    clearTimeout(t);
+    ok = true;
+  } catch(_) { ok = false; }
+  netAt = Date.now(); netVerdict = ok;
+  return ok;
 }
 
 function showGeoWarn(on) {
@@ -827,7 +859,7 @@ function showGeoWarn(on) {
 async function geoHeartbeat() {
   try { onGeoOk(await geoOnce({enableHighAccuracy:false, timeout:12000, maximumAge:GEO_MAX_AGE})); }
   catch(e) { onGeoErr(e); }
-  if (geoOk && Date.now() - geoLast > GEO_MAX_AGE) { geoOk = false; avisaSemGeo(); }
+  if (geoOk && Date.now() - geoLast > GEO_MAX_AGE) { geoOk = false; classificaFalha(); }
 }
 
 const geoOnce = opts => new Promise((res,rej) =>
@@ -852,25 +884,13 @@ async function requestGeo(fromUser) {
     if (fromUser) toast('Localização ativa ✓');
   } catch(e) {
     onGeoErr(e);
-    if (fromUser) toast('Ainda sem localização — dá para registrar assim mesmo.', 4500);
   } finally {
     btn.disabled = false; btn.textContent = 'Ativar localização';
   }
 }
 
-// Fecha o aviso a pedido de quem está com o aparelho. Nada é bloqueado: a faixa
-// amarela continua na tela e o registro segue liberado, sem coordenadas.
-function dispensaGps() {
-  gpsAviso = true;
-  hideGpsModal();
-  showGeoWarn(!geoOk);
-  if (curMatch) setPunchBtn(curMatch);
-}
-
-// `force` = veio de um toque na faixa amarela: reabre mesmo já dispensado.
-function showGpsModal(custom, fatal, force) {
-  if (adminOpen) return;                     // não atrapalhar a tela de configuração
-  if (gpsAviso && !force) return;            // já avisado neste episódio
+function showGpsModal(custom, fatal) {
+  if (adminOpen) return;                     // não trancar a tela de configuração
   const code = geoErr && geoErr.code;
   const t = document.getElementById('gpsTitle');
   const p = document.getElementById('gpsTxt');
@@ -880,15 +900,14 @@ function showGpsModal(custom, fatal, force) {
     p.textContent = custom;
   } else if (code === 1) {
     t.textContent = 'Localização bloqueada';
-    p.textContent = 'O acesso à localização foi negado para este app. Libere a permissão e toque em "Ativar localização". O ponto pode ser registrado assim mesmo, mas irá SEM coordenadas.';
+    p.textContent = 'O acesso à localização foi negado para este app. Libere a permissão e toque em "Ativar localização".';
   } else {
     t.textContent = 'Localização desligada';
-    p.textContent = 'Ative a localização do aparelho e toque no botão abaixo. O ponto pode ser registrado assim mesmo, mas irá SEM coordenadas.';
+    p.textContent = 'O registro de ponto exige a localização ligada. Ative-a no aparelho e toque no botão abaixo.';
   }
   document.getElementById('gpsHelp').innerHTML = geoHelpHTML(code === 1);
   document.getElementById('gpsBtn').style.display = fatal ? 'none' : '';
   document.getElementById('gpsModal').classList.add('on');
-  gpsAviso = true;
 }
 
 function hideGpsModal() { document.getElementById('gpsModal').classList.remove('on'); }
@@ -922,13 +941,19 @@ async function setPunchBtn(match, msg='Aguardando rosto…') {
     btn.className = 'btn-punch';
     return;
   }
+  if (!podeRegistrar()) {                     // trava dura: sem localização, sem ponto
+    btn.disabled = true;
+    btn.className = 'btn-punch';
+    btn.textContent = '📍 Ative a localização';
+    return;
+  }
   const type   = await nextType(match.name);
   btn.disabled = false;
   if (geoOk) {
     btn.className= 'btn-punch '+(type==='entry'?'entry':'exit');
     btn.textContent = (type==='entry'?'✅ Registrar Entrada':'🔴 Registrar Saída')+' — '+match.name;
   } else {
-    // Registro liberado sem coordenadas: cor de alerta, para não passar por normal.
+    // Liberado só por estar fora de rede: cor de alerta, para não passar por normal.
     btn.className= 'btn-punch nogeo';
     btn.textContent = (type==='entry'?'Registrar Entrada':'Registrar Saída')+' sem localização — '+match.name;
   }
@@ -946,6 +971,7 @@ async function nextType(name) {
 
 async function doPunch() {
   if (!curMatch || punching || Date.now() < coolUntil) return;
+  if (!podeRegistrar()) { showGpsModal(); return; }
 
   punching = true;
   const name = curMatch.name;
@@ -961,9 +987,16 @@ async function doPunch() {
       pos = await getFreshPosition(12000);
       onGeoOk(pos);
     } catch(err) {
-      // Nada é abortado por falta de coordenadas: o registro segue e a falta
-      // fica carimbada em `semLocal`, na cor do botão e no aviso da tela.
       geoErr = err; geoOk = false;
+      // A última palavra é aqui, não no estado que a tela mostrava: só passa sem
+      // coordenadas se der para confirmar, neste instante, que não há rede.
+      netAt = 0;                              // veredito guardado não serve para isto
+      semRede = !(err && err.code === 1) && !(await temRede());
+      if (!semRede) {
+        showGpsModal();
+        toast('Localização indisponível — ponto NÃO registrado.', 5000);
+        return;
+      }
       showGeoWarn(true);
     }
 
@@ -977,7 +1010,7 @@ async function doPunch() {
       lat         : pos ? +pos.coords.latitude.toFixed(6)  : null,
       lon         : pos ? +pos.coords.longitude.toFixed(6) : null,
       accuracy    : pos ? Math.round(pos.coords.accuracy)  : null,
-      semLocal    : !pos,                     // registrado sem coordenadas
+      semLocal    : !pos,                     // liberado por estar fora de rede
       synced      : false,
     });
 
@@ -1052,7 +1085,8 @@ function goBack() {
   adminOpen = false;
   document.getElementById('vAdmin').classList.remove('active');
   document.getElementById('vPunch').classList.add('active');
-  showGeoWarn(!geoOk);                    // a faixa de aviso volta com a tela do ponto
+  if (!podeRegistrar()) showGpsModal();   // de volta ao ponto, a trava vale de novo
+  showGeoWarn(!geoOk && semRede);
 }
 
 async function saveSettings() {
