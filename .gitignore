@@ -1,7 +1,8 @@
 chat-transcript.md
 handoff.md
 handoff-revisao-scripts.md
-handoff-claude-code.md
+handoff*.md
+recomendacoes_seguranca.md
 sync_ponto.bat
 agendar_sync_ponto.bat
 logs/
