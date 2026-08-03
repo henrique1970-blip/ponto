@@ -60,11 +60,18 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
   background:linear-gradient(180deg,rgba(15,23,42,.55),rgba(15,23,42,.82));backdrop-filter:blur(2px);text-align:center;padding:16px}
 .confirm-ov.on{display:flex}
 .co-hi{font-size:.8rem;color:#FDBA74;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+/* Foto do cadastro ao lado do nome: se o app errar a pessoa, o erro fica
+   visível ANTES de confirmar — quem está na frente da câmera vê outro rosto. */
+.co-face{width:76px;height:76px;border-radius:50%;object-fit:cover;border:3px solid #FDBA74;background:#334155;display:none}
+.co-face.on{display:block}
 .co-name{font-size:1.9rem;font-weight:800;color:#fff;line-height:1.15;max-width:92%;word-break:break-word}
 .co-thumb{font-size:3.2rem;line-height:1;animation:pulse 1.4s ease-in-out infinite;margin-top:2px}
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.75}50%{transform:scale(1.16);opacity:1}}
 .co-hint{font-size:.9rem;color:#E2E8F0;font-weight:600}
 .co-hint small{display:block;font-size:.75rem;color:#94A3B8;font-weight:500;margin-top:3px}
+.co-live{display:none;font-size:.78rem;font-weight:700;color:#FDE68A;background:rgba(180,83,9,.35);
+  border:1px solid rgba(253,230,138,.35);padding:4px 12px;border-radius:14px}
+.co-live.on{display:block}
 .co-timer{font-size:.75rem;color:#94A3B8;font-variant-numeric:tabular-nums}
 .gesture-off{color:#FCD34D;font-size:.72rem;font-weight:600}
 
@@ -125,6 +132,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .uinfo{flex:1;min-width:0}
 .uname{font-weight:700;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .uphotos{font-size:.75rem;color:var(--text2)}
+.tag-vis{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  background:#FEF3C7;color:#92400E;border-radius:5px;padding:1px 5px;vertical-align:middle}
 .empty-msg{font-size:.85rem;color:var(--text2);text-align:center;padding:12px 0}
 
 /* ---- PUNCH LOG ---- */
@@ -201,12 +210,14 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
     <!-- Passo de confirmação -->
     <div class="confirm-ov" id="confirmOv">
       <div class="co-hi">Confirmar saída</div>
+      <img class="co-face" id="coFace" alt="">
       <div class="co-name" id="coName"></div>
       <div class="co-thumb">👍</div>
       <div class="co-hint" id="coHint">
         Mostre o polegar para cima
         <small>ou toque no botão verde abaixo</small>
       </div>
+      <div class="co-live" id="coLive">👁 Pisque ou mexa a cabeça</div>
       <div class="co-timer" id="coTimer"></div>
     </div>
 
@@ -226,7 +237,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
     <button class="btn-punch" id="btnPunch" disabled onclick="confirmPunch('botao')">
       Aguardando rosto…
     </button>
-    <button class="btn-cancel" id="btnCancel" onclick="cancelConfirm()">Cancelar</button>
+    <button class="btn-cancel" id="btnCancel" onclick="rejectConfirm()">✖ Não sou eu / Cancelar</button>
   </div>
 </div>
 
@@ -259,6 +270,37 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       </div>
       <p class="hint">Impede que a mesma pessoa registre outra saída antes desse prazo.
         Padrão: <b>12h</b>. Use <b>0</b> para desligar a trava (não recomendado).</p>
+      <div class="field">
+        <label>Rigor do reconhecimento facial</label>
+        <select id="cfgRigor">
+          <option value="alto">Alto — quase nunca troca de pessoa (pode pedir 2ª tentativa)</option>
+          <option value="medio">Médio — recomendado</option>
+          <option value="baixo">Baixo — aceita mais fácil (risco de identificar errado)</option>
+        </select>
+      </div>
+      <p class="hint">Quanto maior o rigor, menor a chance de um <b>não cadastrado</b> ser
+        confundido com um funcionário. Se alguém legítimo passar a não ser reconhecido,
+        recadastre-o com boa luz antes de baixar o rigor.</p>
+      <div class="field-chk">
+        <input id="cfgPhoto" type="checkbox" checked>
+        <label for="cfgPhoto">Enviar foto do momento do registro para a planilha</label>
+      </div>
+      <p class="hint">Guarda uma miniatura do rosto de quem registrou, para auditoria posterior.
+        Exige reautorizar o Apps Script (acesso ao Google Drive).</p>
+      <div class="field-chk">
+        <input id="cfgLive" type="checkbox" checked>
+        <label for="cfgLive">Exigir prova de vida (piscar ou mexer a cabeça)</label>
+      </div>
+      <p class="hint">Impede confirmar o ponto segurando uma foto impressa ou a tela de outro
+        celular. Qualquer pessoa satisfaz em 1–2 s sem precisar ser instruída; se a câmera não
+        conseguir medir, libera sozinha em 4 s.</p>
+      <div class="field-chk">
+        <input id="cfgAdapt" type="checkbox" checked>
+        <label for="cfgAdapt">Aprender com os registros confirmados</label>
+      </div>
+      <p class="hint">Guarda até 6 leituras extras por funcionário, vindas de reconhecimentos
+        muito seguros, para cobrir luzes e ângulos que o cadastro original não pegou.
+        <button class="btn btn-gray btn-sm" style="margin-top:6px" onclick="esquecerAuto()">Esquecer o que foi aprendido</button></p>
       <div class="field-chk">
         <input id="cfgWake" type="checkbox" checked>
         <label for="cfgWake">Manter a tela sempre ligada</label>
@@ -319,6 +361,12 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       <label>Nome completo</label>
       <input id="regName" type="text" placeholder="Ex: Maria Silva" autocomplete="off">
     </div>
+    <div class="field-chk">
+      <input id="regBlocked" type="checkbox">
+      <label for="regBlocked">Visitante — não registra ponto</label>
+    </div>
+    <p class="hint">Marque para pessoas que passam na frente do totem mas não são do quadro.
+      Cadastrá-las evita que o app as confunda com um funcionário parecido.</p>
     <video id="regVideo" class="reg-video" autoplay muted playsinline></video>
     <div class="thumbs" id="thumbs"></div>
     <div class="reg-status" id="regStatus">Tire 3 fotos para melhor precisão (mínimo 1).</div>
@@ -398,15 +446,117 @@ const THUMB_SCORE     =  0.62;  // confiança mínima do gesto
 const THUMB_FRAMES    =     4;  // leituras consecutivas exigidas (anti-falso-positivo)
 const GESTURE_INTERVAL=   100;  // ms entre inferências de gesto (~10 fps)
 
+// ─── ANTI-IDENTIFICAÇÃO EQUIVOCADA ──────────────────────────────────────────
+// O descritor do face-api é um vetor de 128 números; "parecer com" é distância
+// euclidiana pequena. O `findBestMatch` sozinho responde "de quem é o cadastro
+// MAIS PARECIDO" — nunca "essa pessoa está cadastrada?". Um desconhecido sempre
+// tem um vizinho mais próximo, e se ele cair abaixo do limiar, vira falso
+// positivo. As quatro travas abaixo atacam justamente isso.
+const RIGOR = {
+  //           limiar     margem p/ 2º    frames    rosto mín.  score  desvio
+  alto  : { max:0.42, margem:0.10, streak:4, tam:0.20, score:0.68, yaw:0.24 },
+  medio : { max:0.48, margem:0.07, streak:3, tam:0.16, score:0.60, yaw:0.30 },
+  baixo : { max:0.55, margem:0.04, streak:2, tam:0.13, score:0.52, yaw:0.38 },
+};
+const DEFAULT_RIGOR   = 'medio';
+const DETECT_INTERVAL =   350;  // ms entre detecções (era 600 — o streak precisa ser rápido)
+const ROLL_MAX        =    18;  // inclinação máxima da cabeça, em graus
+const CROSS_MIN_DIST  =  0.45;  // no cadastro: rejeita rosto quase igual ao de outro funcionário
+const FOTO_LADO       =   200;  // px do recorte enviado à planilha
+const FOTO_QUALIDADE  =  0.72;
+
+// ─── GATILHO DE INTENÇÃO ────────────────────────────────────────────────────
+// Quem PASSA na frente do totem não quer registrar nada — mas o rosto dele passa
+// pelas travas e a tela de confirmação abre sozinha. Registrar é um ato
+// deliberado, e um ato deliberado tem assinatura própria: a pessoa CHEGA PERTO,
+// FICA PARADA e PERMANECE. Nada disso precisa de modelo novo — os três números
+// já estão na caixa do rosto que a detecção devolve.
+// Nenhuma dessas travas falha em silêncio: a tela diz o que fazer ("Aproxime-se",
+// "Fique parado"), então um limiar apertado demais vira instrução, não bloqueio.
+const INTENT_TAM    = 0.26;  // rosto mínimo para ABRIR a confirmação (fração da largura)
+// 0,12 e não 0,08: em simulação, quem fica em pé balançando 3 cm marca 0,117 e
+// seria BARRADO por 0,08 — enquanto qualquer um que atravesse o quadro, de 0,08 a
+// 1,2 m/s, marca de 0,41 a 0,81. Margem de uma ordem de grandeza contra o caso
+// real; apertar mais só produziria falso negativo em gente legítima.
+const INTENT_DERIVA = 0.12;  // deslocamento máx. do centro do rosto na janela
+const INTENT_MS     = 2000;  // permanência contínua exigida, em relógio
+const INTENT_GAP    = 1200;  // sumiu por mais que isso = saiu do quadro, recomeça
+
+// ─── GESTO DA PESSOA CERTA ──────────────────────────────────────────────────
+// O reconhecedor devolve TODAS as mãos do quadro. Pegar `gestures[0]` deixa um 👍
+// de alguém ao fundo confirmar a saída de quem está na frente. Como `landmarks[i]`
+// corresponde a `gestures[i]`, dá para exigir que a mão esteja perto do rosto que
+// abriu a confirmação — e do tamanho certo, porque mão de fundo aparece menor.
+// Dos dois testes, quem separa de fato é a ESCALA: mão e rosto encolhem juntos
+// com a distância, então mão÷rosto é praticamente constante (~0,89 em simulação,
+// em qualquer pose da própria pessoa) e cai com 1/k para quem está k vezes mais
+// longe. 0,45 barra quem estiver do dobro da distância para trás e ainda tolera
+// um bbox de mão 2× menor que o modelo antes de virar falso negativo.
+// O RAIO só existe para o caso de a mão aparecer no canto oposto do quadro: 3,5
+// aceita até o braço totalmente esticado de lado (mediu 3,21).
+// Limite honesto: isso barra quem está do outro lado da sala, não quem está
+// ombro a ombro. Se falhar, o botão verde continua ali — degrada, não trava.
+const GESTO_RAIO    =  3.5;  // distância máx. mão↔rosto, em larguras de rosto
+const GESTO_ESCALA  = 0.45;  // tamanho mín. da mão em relação à largura do rosto
+
+// ─── GALERIA ADAPTATIVA ─────────────────────────────────────────────────────
+// O cadastro é tirado num dia, numa luz. O rosto aparece o ano inteiro em luzes
+// diferentes. Cada saída CONFIRMADA PELA PRÓPRIA PESSOA é um exemplo rotulado de
+// graça — guardar os melhores aproxima o cadastro da realidade e deixa apertar o
+// limiar sem passar a recusar gente legítima.
+const ADAPT_MAX       =     6;  // descritores aprendidos por funcionário
+const ADAPT_DIST_MAX  =  0.30;  // só aprende de reconhecimento muito seguro…
+const ADAPT_MARGEM    =  0.15;  // …e sem nenhuma disputa com o 2º colocado
+const ADAPT_DIVERSO   =  0.20;  // e só se acrescentar variação que ainda não existe
+
+// ─── PROVA DE VIDA ──────────────────────────────────────────────────────────
+// Uma foto impressa (ou na tela de outro celular) é um rosto perfeito, parado e
+// rígido. Piscar e girar a cabeça são coisas que ela não faz.
+const LIVE_INTERVAL   =   130;  // ms entre leituras de vivacidade (~8 fps)
+const LIVE_EAR_FECHA  =  0.19;  // EAR abaixo disso = olho fechado
+const LIVE_EAR_ABRE   =  0.25;  // …e acima disso, aberto de novo (fecha a piscada)
+// 0,18 é bem acima do tremor dos landmarks (a ponta do nariz oscila alguns pixels
+// a cada quadro, o que sozinho já daria ~0,07) e bem abaixo de um giro de cabeça
+// de verdade, que passa de 0,25 — testado com landmarks sintéticos.
+const LIVE_YAW_DELTA  =  0.18;
+// Média móvel antes de medir a amplitude. Sem ela, o ruído quadro a quadro se
+// ACUMULA no min/max e uma foto tremendo na mão sozinha atinge o limiar em ~20s
+// (medido: 0,186). Suavizar mata o ruído e preserva um giro real, que é sustentado.
+const LIVE_YAW_ALFA   =  0.30;
+// A amplitude é medida só nas últimas ~3s. Min/max ao longo da janela inteira de
+// 20s vai somando ruído até cruzar qualquer limiar — dado tempo suficiente, uma
+// foto tremendo "vira" movimento. Um giro de cabeça acontece em menos de 3s.
+const LIVE_YAW_JANELA =    24;  // leituras (~3s a 130ms)
+const LIVE_TIMEOUT    =  4000;  // só vale quando NÃO se consegue medir nada
+
 // ─── STATE ──────────────────────────────────────────────────────────────────
 let users     = [];
-let matcher   = null;
-let curMatch  = null;          // {name, distance}
+let curMatch  = null;          // {name, dist, margem, box}
 let mode      = 'scanning';    // 'scanning' | 'confirming' | 'done' | 'idle'
 let regStream = null;
 let regDescs  = [];
 let regThumbs = [];
 let adminOpen = false;
+
+let rigor       = RIGOR[DEFAULT_RIGOR];
+let rigorNome   = DEFAULT_RIGOR;
+let fotoOn      = true;
+let matchName   = null;        // nome candidato do streak em andamento
+let matchStreak = 0;           // detecções consecutivas confirmando esse nome
+let lastBox     = null;        // última caixa do rosto (recorte da foto de auditoria)
+let rejected    = Object.create(null);  // nome → validade do "não sou eu"
+let intentHist  = [];          // {t,cx,cy} das últimas detecções válidas (gatilho de intenção)
+
+let adaptOn     = true;        // galeria adaptativa ligada
+let liveOn      = true;        // exigir prova de vida
+let liveOk      = false;       // vivacidade satisfeita nesta confirmação
+let liveBusy    = false;       // uma leitura de vivacidade em voo
+let liveLastTs  = 0;
+let liveFirstTs = 0;           // 1ª tentativa — base do LIVE_TIMEOUT
+let liveLeituras= 0;           // quantas leituras válidas saíram (0 = câmera não ajuda)
+let liveOlhos   = 'aberto';    // máquina de estados da piscada
+let liveYaws    = [];          // últimas leituras de pose (janela deslizante)
+let liveYawSuave= null;        // média móvel do yaw (filtra tremor de landmark)
 
 let gestureRec   = null;
 let gestureOn    = true;
@@ -423,6 +573,10 @@ async function init() {
   wakeWanted = await getCfg('wake', true);
   gestureOn  = await getCfg('gesture', true);
   minHours   = await getCfg('minhours', DEFAULT_MIN_H);
+  setRigor(await getCfg('rigor', DEFAULT_RIGOR));
+  fotoOn     = await getCfg('foto', true);
+  adaptOn    = await getCfg('adapt', true);
+  liveOn     = await getCfg('live', true);
 
   setLoadMsg('Carregando modelo de detecção…');
   try {
@@ -574,7 +728,7 @@ function loop() {
 
   if (mode === 'scanning') {
     const now = Date.now();
-    if (!busy && now - lastDt >= 600) {
+    if (!busy && now - lastDt >= DETECT_INTERVAL) {
       lastDt = now;
       busy = true;
       detect().finally(() => { busy = false; });
@@ -584,7 +738,123 @@ function loop() {
   }
 }
 
+// ─── COMPARAÇÃO DE ROSTOS ───────────────────────────────────────────────────
+function euclid(a, b) {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; }
+  return Math.sqrt(s);
+}
+
+// Distância de um descritor a um funcionário = média das distâncias às fotos
+// dele (mesmo critério do FaceMatcher do face-api, mas exposto para podermos
+// olhar o 2º colocado — que é o que o findBestMatch esconde).
+// As fotos aprendidas (galeria adaptativa) entram na mesma média: são o mesmo
+// rosto em condições que o cadastro original não cobriu.
+function distToUser(desc, u) {
+  let s = 0, n = 0;
+  for (const d of u.descF) { s += euclid(desc, d); n++; }
+  if (u.autoF) for (const d of u.autoF) { s += euclid(desc, d); n++; }
+  return s / n;
+}
+
+// Todos os cadastrados ordenados do mais parecido ao menos parecido.
+function ranking(desc) {
+  return users
+    .map(u => ({ name: u.name, dist: distToUser(desc, u), user: u }))
+    .sort((a, b) => a.dist - b.dist);
+}
+
+// ─── QUALIDADE DO ROSTO ─────────────────────────────────────────────────────
+// Descritor ruim = distância ruim. Rosto pequeno, escuro, de lado ou torto gera
+// um vetor impreciso que pode cair perto do cadastro de QUALQUER pessoa. Barrar
+// esses quadros é o que mais reduz identificação equivocada, antes de qualquer
+// ajuste de limiar.
+const meanPt = pts => ({
+  x: pts.reduce((s,p)=>s+p.x,0)/pts.length,
+  y: pts.reduce((s,p)=>s+p.y,0)/pts.length,
+});
+const dist2 = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
+// Eye Aspect Ratio: altura do olho ÷ largura. Cai perto de zero quando fecha.
+// Os 6 pontos vêm na ordem canto-externo, topo×2, canto-interno, base×2.
+function ear(olho) {
+  if (olho.length < 6) return 1;
+  const larg = dist2(olho[0], olho[3]);
+  if (!larg) return 1;
+  return (dist2(olho[1], olho[5]) + dist2(olho[2], olho[4])) / (2 * larg);
+}
+
+// Quanto o rosto está girado, medido só por geometria relativa: a ponta do nariz
+// equidistante dos olhos = de frente. É invariante a posição e escala, então
+// tremer a mão segurando uma foto NÃO altera esse número — girar a cabeça altera.
+function yawDe(lm) {
+  const le = meanPt(lm.getLeftEye());
+  const re = meanPt(lm.getRightEye());
+  const nariz = lm.getNose()[3];
+  const inter = dist2(le, re);
+  if (!inter) return null;
+  return (dist2(nariz, le) - dist2(nariz, re)) / inter;
+}
+
+function faceQuality(det, larguraVideo) {
+  const box = det.detection.box;
+
+  if (det.detection.score < rigor.score) return { ok:false, msg:'Melhore a iluminação' };
+  if (box.width / larguraVideo < rigor.tam) return { ok:false, msg:'Aproxime-se da câmera' };
+
+  const lm = det.landmarks;
+  const le = meanPt(lm.getLeftEye());
+  const re = meanPt(lm.getRightEye());
+
+  // Rosto de frente: a ponta do nariz fica equidistante dos dois olhos.
+  const yaw = yawDe(lm);
+  if (yaw === null) return { ok:false, msg:'Olhe para a câmera' };
+  if (Math.abs(yaw) > rigor.yaw) return { ok:false, msg:'Olhe de frente para a câmera' };
+
+  // Cabeça torta distorce o alinhamento que o face-api usa antes do descritor.
+  const roll = Math.abs(Math.atan2(re.y - le.y, re.x - le.x) * 180 / Math.PI);
+  if (Math.min(roll, 180 - roll) > ROLL_MAX) return { ok:false, msg:'Mantenha a cabeça reta' };
+
+  return { ok:true };
+}
+
+// ─── GATILHO DE INTENÇÃO ────────────────────────────────────────────────────
+// Distingue "veio registrar" de "passou na frente". Alimentada só com quadros de
+// qualidade aprovada, guarda o centro do rosto numa janela de tempo e devolve:
+//   perto  — o rosto ocupa o quadro como quem se aproximou de propósito;
+//   parado — o centro do rosto mal se moveu na janela (pedestre translada);
+//   span   — há quantos ms a pessoa está continuamente ali.
+function intencao(box, larguraVideo) {
+  const agora = Date.now();
+  const ult   = intentHist[intentHist.length - 1];
+
+  // Lacuna longa = saiu do quadro (ou virou o rosto por um tempo): recomeça a
+  // contagem em vez de somar duas presenças distintas.
+  if (!ult || agora - ult.t > INTENT_GAP) intentHist.length = 0;
+
+  intentHist.push({ t:agora, cx:box.x + box.width/2, cy:box.y + box.height/2 });
+  // Mantém um pouco mais que a janela exigida, para o span nunca ficar aquém dela
+  // por causa do arredondamento do intervalo de detecção.
+  while (intentHist.length > 1 && agora - intentHist[0].t > INTENT_MS * 1.5) intentHist.shift();
+
+  let x0 =  Infinity, x1 = -Infinity, y0 =  Infinity, y1 = -Infinity;
+  for (const p of intentHist) {
+    if (p.cx < x0) x0 = p.cx;
+    if (p.cx > x1) x1 = p.cx;
+    if (p.cy < y0) y0 = p.cy;
+    if (p.cy > y1) y1 = p.cy;
+  }
+
+  return {
+    perto : box.width / larguraVideo >= INTENT_TAM,
+    parado: Math.max(x1 - x0, y1 - y0) / larguraVideo <= INTENT_DERIVA,
+    span  : agora - intentHist[0].t,
+  };
+}
+
 // ─── SCANNING ───────────────────────────────────────────────────────────────
+function resetStreak() { matchName = null; matchStreak = 0; }
+
 async function detect() {
   const dets = await faceapi
     .detectAllFaces(video, OPTS)
@@ -599,49 +869,123 @@ async function detect() {
   const ring  = document.getElementById('faceRing');
   const msg   = document.getElementById('camMsg');
   const badge = document.getElementById('nameBadge');
+  const recusa = m => { badge.style.display='none'; resetStreak(); setIdleBtn(m); };
 
   if (!dets.length) {
-    curMatch = null;
+    curMatch = null; lastBox = null;
     badge.style.display = 'none';
     ring.classList.remove('detected');
     msg.textContent = 'Posicione o rosto na câmera';
+    resetStreak();
     setIdleBtn();
     return;
   }
 
-  const best = dets[0];
+  // Maior rosto = quem está no totem. Se houver outro quase do mesmo tamanho,
+  // não dá para saber de quem é a saída — melhor não arriscar.
+  const porArea = dets.slice().sort((a,b) =>
+    b.detection.box.area - a.detection.box.area);
+  const best = porArea[0];
   const b    = best.detection.box;
+
   ctx.strokeStyle = '#4ADE80';
   ctx.lineWidth   = 2;
   ctx.strokeRect(b.x, b.y, b.width, b.height);
-
   ring.classList.add('detected');
   msg.textContent = '';
+  lastBox = { x:b.x, y:b.y, width:b.width, height:b.height };
 
-  if (!matcher) {
+  if (porArea.length > 1 && porArea[1].detection.box.area > b.area * 0.7) {
+    msg.textContent = '⚠ Apenas uma pessoa por vez';
+    return recusa('Mais de um rosto no quadro');
+  }
+
+  if (!users.length) {
     msg.textContent = 'Nenhum funcionário cadastrado';
+    return recusa('Cadastre funcionários no Admin');
+  }
+
+  const q = faceQuality(best, video.videoWidth);
+  if (!q.ok) { msg.textContent = q.msg; return recusa(q.msg); }
+
+  // (0) Gatilho de intenção — antes de qualquer comparação, inclusive antes de
+  //     dizer um nome na tela: quem só passou na frente não fica sabendo de quem
+  //     é o rosto que o app achou parecido.
+  const intent = intencao(b, video.videoWidth);
+  if (!intent.perto) {
+    msg.textContent = '👋 Aproxime-se para registrar';
+    return recusa('Aproxime-se da câmera');
+  }
+  if (!intent.parado) {
+    msg.textContent = '✋ Fique parado de frente';
+    return recusa('Fique parado de frente');
+  }
+
+  const rank = ranking(best.descriptor);
+  const p1 = rank[0], p2 = rank[1];
+
+  // (1) Limiar absoluto — precisa ser parecido o bastante, em termos absolutos.
+  if (p1.dist > rigor.max) return recusa('Rosto não reconhecido');
+
+  // (1b) Não-funcionário conhecido. Quem mais causa identificação equivocada é
+  //      quem passa direto na frente do totem todo dia sem ser do quadro:
+  //      cadastrá-lo aqui tira o rosto dele da disputa pelo vizinho mais próximo,
+  //      em vez de deixá-lo cair sempre no funcionário mais parecido.
+  if (p1.user.blocked) {
+    badge.textContent   = p1.user.name + ' · não registra ponto';
+    badge.style.display = 'block';
+    resetStreak();
+    setIdleBtn('Cadastrado como visitante');
+    return;
+  }
+
+  // (2) Teste de margem — o 1º precisa ser CLARAMENTE melhor que o 2º. Se dois
+  //     cadastros disputam o mesmo rosto, a resposta certa é "não sei", não o
+  //     desempate por milésimos que produz a troca de pessoa.
+  if (p2 && (p2.dist - p1.dist) < rigor.margem) {
+    msg.textContent = '⚠ Rosto ambíguo';
+    return recusa('Não foi possível confirmar quem é');
+  }
+
+  // (3) Consistência temporal — um falso positivo costuma ser um quadro isolado;
+  //     o rosto certo repete o mesmo nome em detecções seguidas. A permanência
+  //     em relógio entra na mesma barra: o streak conta quadros (e encurta num
+  //     aparelho rápido), INTENT_MS conta segundos de gente parada ali.
+  if (matchName !== p1.name) { matchName = p1.name; matchStreak = 0; }
+  matchStreak++;
+  const progresso = Math.min(matchStreak / rigor.streak, intent.span / INTENT_MS);
+  if (progresso < 1) {
+    const n = Math.min(rigor.streak - 1, Math.max(1, Math.round(progresso * rigor.streak)));
+    badge.textContent   = 'Verificando…';
+    badge.style.display = 'block';
+    setIdleBtn(`Verificando ${'●'.repeat(n)}${'○'.repeat(rigor.streak - n)}`);
+    return;
+  }
+
+  // (4) "Não sou eu" recente — não reoferece o mesmo nome logo em seguida.
+  if (rejected[p1.name] > Date.now()) {
     badge.style.display = 'none';
-    setIdleBtn('Cadastre funcionários no Admin');
+    setIdleBtn('Reconhecimento recusado · aguarde');
     return;
   }
 
-  const m = matcher.findBestMatch(best.descriptor);
-  if (m.label !== 'unknown' && m.distance < 0.55) {
-    const block = await exitBlock(m.label);
-    if (block) {
-      // Já registrou saída há menos de `minHours` — não propõe uma nova.
-      badge.textContent   = m.label;
-      badge.style.display = 'block';
-      setIdleBtn(blockMsg(block));
-      return;
-    }
-    enterConfirm({name: m.label, distance: m.distance});
+  const block = await exitBlock(p1.name);
+  if (block) {
+    // Já registrou saída há menos de `minHours` — não propõe uma nova.
+    badge.textContent   = p1.name;
+    badge.style.display = 'block';
+    setIdleBtn(blockMsg(block));
     return;
   }
 
-  curMatch = null;
-  badge.style.display = 'none';
-  setIdleBtn('Rosto não reconhecido');
+  enterConfirm({
+    name  : p1.name,
+    dist  : p1.dist,
+    margem: p2 ? p2.dist - p1.dist : null,
+    thumb : p1.user.thumb || '',
+    id    : p1.user.id,
+    desc  : Array.from(best.descriptor),   // guardado para a galeria adaptativa
+  });
 }
 
 // ─── TRAVA DE 12H ────────────────────────────────────────────────────────────
@@ -682,6 +1026,21 @@ function enterConfirm(match) {
   mode         = 'confirming';
   thumbStreak  = 0;
   confirmUntil = Date.now() + CONFIRM_TIMEOUT;
+  resetStreak();
+  intentHist.length = 0;       // a próxima oferta exige presença nova, do zero
+
+  const face = document.getElementById('coFace');
+  face.src = match.thumb || '';
+  face.classList.toggle('on', !!match.thumb);
+
+  liveOk      = !liveOn;
+  document.getElementById('coLive').classList.toggle('on', liveOn);
+  liveBusy    = false;
+  liveFirstTs = 0;
+  liveLeituras= 0;
+  liveOlhos   = 'aberto';
+  liveYaws    = [];
+  liveYawSuave= null;
 
   document.getElementById('faceRing').classList.add('hidden');
   document.getElementById('nameBadge').style.display = 'none';
@@ -692,7 +1051,7 @@ function enterConfirm(match) {
 
   const canGesture = gestureOn && gestureRec;
   document.getElementById('coHint').innerHTML = canGesture
-    ? 'Mostre o polegar para cima<br><small>ou toque no botão verde abaixo</small>'
+    ? 'Mostre o polegar para cima <b>ao lado do rosto</b><br><small>ou toque no botão verde abaixo</small>'
     : '<span class="gesture-off">Confirme no botão verde abaixo</span>';
 
   document.getElementById('confirmOv').classList.add('on');
@@ -709,6 +1068,9 @@ function tickConfirm() {
   if (left <= 0) { cancelConfirm(); return; }
   document.getElementById('coTimer').textContent = `expira em ${Math.ceil(left/1000)}s`;
 
+  tickLiveness();
+  if (!liveOk) return;              // sem prova de vida, nem o gesto vale
+
   if (!gestureOn || !gestureRec) return;
 
   // Roda a ~10 fps em vez de a cada frame: o gesto é sustentado, não instantâneo,
@@ -722,8 +1084,19 @@ function tickConfirm() {
   try { res = gestureRec.recognizeForVideo(video, ts); }
   catch(_) { return; }
 
-  const g = res && res.gestures && res.gestures[0] && res.gestures[0][0];
-  if (g && g.categoryName === 'Thumb_Up' && g.score >= THUMB_SCORE) {
+  // Varre TODAS as mãos, não só a primeira, e aceita apenas a que estiver junto
+  // do rosto reconhecido — ver maoDaPessoa().
+  const maos = (res && res.gestures) || [];
+  let ok = false;
+  for (let i = 0; i < maos.length; i++) {
+    const g = maos[i] && maos[i][0];
+    if (g && g.categoryName === 'Thumb_Up' && g.score >= THUMB_SCORE && maoDaPessoa(res, i)) {
+      ok = true;
+      break;
+    }
+  }
+
+  if (ok) {
     thumbStreak++;
     if (thumbStreak >= THUMB_FRAMES) confirmPunch('gesto');
   } else {
@@ -731,16 +1104,134 @@ function tickConfirm() {
   }
 }
 
+// A mão `i` é de quem está registrando? Dois testes, ambos relativos ao rosto —
+// então valem em qualquer resolução e a qualquer distância da câmera:
+//   posição — o 👍 da própria pessoa fica a poucas larguras de rosto dele;
+//   escala  — mão de quem está ao fundo aparece pequena perto do rosto da frente.
+// Sem caixa de rosto conhecida não há como julgar: libera, para não quebrar a
+// confirmação por gesto num caso que nada tem de suspeito.
+function maoDaPessoa(res, i) {
+  if (!lastBox || !lastBox.width) return true;
+  const lm = res.landmarks && res.landmarks[i];
+  if (!lm || !lm.length) return true;
+
+  const W = video.videoWidth, H = video.videoHeight;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, sx = 0, sy = 0;
+  for (const p of lm) {                       // landmarks vêm normalizados (0–1)
+    if (p.x < x0) x0 = p.x;
+    if (p.x > x1) x1 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.y > y1) y1 = p.y;
+    sx += p.x; sy += p.y;
+  }
+
+  const cx = (sx / lm.length) * W, cy = (sy / lm.length) * H;
+  const fx = lastBox.x + lastBox.width / 2, fy = lastBox.y + lastBox.height / 2;
+
+  const dist = Math.hypot(cx - fx, cy - fy) / lastBox.width;
+  const tam  = Math.max((x1 - x0) * W, (y1 - y0) * H) / lastBox.width;
+
+  return dist <= GESTO_RAIO && tam >= GESTO_ESCALA;
+}
+
+// ─── PROVA DE VIDA ──────────────────────────────────────────────────────────
+// Roda só na janela de confirmação (não no scanning, para não pesar o loop) e
+// aceita DUAS evidências independentes — piscar ou mexer a cabeça. Qualquer
+// pessoa satisfaz uma das duas em segundos sem ser instruída; uma foto parada
+// não satisfaz nenhuma. Só detecção + landmarks, sem descritor: é barato.
+function tickLiveness() {
+  if (liveOk || liveBusy) return;
+
+  const ts = performance.now();
+  if (ts - liveLastTs < LIVE_INTERVAL) return;
+  liveLastTs = ts;
+  liveBusy   = true;
+  if (!liveFirstTs) liveFirstTs = Date.now();
+
+  faceapi.detectSingleFace(video, OPTS).withFaceLandmarks(true)
+    .then(det => {
+      if (mode !== 'confirming' || liveOk) return;
+
+      if (!det) {
+        // Não conseguimos MEDIR (contraluz, rosto saiu do quadro). Insistir seria
+        // travar um funcionário legítimo por limitação da câmera.
+        // Atenção: isso vale só para "sem leitura nenhuma". Enquanto houver
+        // medição válida não há liberação por tempo — senão bastaria segurar uma
+        // foto parada e esperar.
+        if (!liveLeituras && Date.now() - liveFirstTs > LIVE_TIMEOUT) marcarVivo('sem leitura');
+        return;
+      }
+      liveLeituras++;
+      seguirRosto(det.detection.box);
+
+      const lm = det.landmarks;
+
+      // (a) Piscada: precisa fechar E abrir de novo. Só "fechado" pode ser
+      //     landmark ruim ou olho apertado contra o sol.
+      const e = (ear(lm.getLeftEye()) + ear(lm.getRightEye())) / 2;
+      if (liveOlhos === 'aberto'  && e < LIVE_EAR_FECHA) liveOlhos = 'fechado';
+      else if (liveOlhos === 'fechado' && e > LIVE_EAR_ABRE) { marcarVivo('piscada'); return; }
+
+      // (b) Movimento de cabeça: amplitude de pose ao longo da janela.
+      const y = yawDe(lm);
+      if (y !== null) {
+        liveYawSuave = liveYawSuave === null ? y
+                     : liveYawSuave + LIVE_YAW_ALFA * (y - liveYawSuave);
+        liveYaws.push(liveYawSuave);
+        if (liveYaws.length > LIVE_YAW_JANELA) liveYaws.shift();
+        const amp = Math.max.apply(null, liveYaws) - Math.min.apply(null, liveYaws);
+        if (amp > LIVE_YAW_DELTA) { marcarVivo('movimento'); return; }
+      }
+    })
+    .catch(() => { marcarVivo('indisponível'); })   // degrada como os gestos
+    .finally(() => { liveBusy = false; });
+}
+
+// Durante a confirmação o scanning não roda, então `lastBox` congelaria no
+// instante do reconhecimento — e é ele a referência do raio do gesto e do recorte
+// da foto. A vivacidade já detecta o rosto a ~8 fps: aproveita a caixa dela.
+// Só aceita se for o MESMO rosto (centro a menos de uma largura de distância):
+// detectSingleFace devolve a face mais confiante, que num quadro cheio pode não
+// ser a de quem está registrando, e mover a referência para outra pessoa
+// estragaria justamente as duas coisas que ela protege.
+function seguirRosto(box) {
+  if (!box || !box.width) return;
+  if (lastBox && lastBox.width) {
+    const dx = (box.x + box.width/2)  - (lastBox.x + lastBox.width/2);
+    const dy = (box.y + box.height/2) - (lastBox.y + lastBox.height/2);
+    if (Math.hypot(dx, dy) > lastBox.width) return;
+  }
+  lastBox = { x:box.x, y:box.y, width:box.width, height:box.height };
+}
+
+function marcarVivo(_motivo) {
+  liveOk = true;
+  const hint = document.getElementById('coLive');
+  if (hint) hint.classList.remove('on');
+}
+
 function cancelConfirm() {
   if (mode !== 'confirming') return;
   exitConfirmUI();
   curMatch = null;
   mode     = 'scanning';
+  resetStreak();
   setIdleBtn();
+}
+
+// "Não sou eu": além de cancelar, bloqueia esse nome por 30s. Sem isso o loop
+// reconheceria o mesmo rosto no quadro seguinte e reabriria a mesma tela errada.
+function rejectConfirm() {
+  if (mode !== 'confirming' || !curMatch) { cancelConfirm(); return; }
+  rejected[curMatch.name] = Date.now() + 30000;
+  toast('Reconhecimento recusado. Procure o responsável para recadastrar seu rosto.', 5000);
+  cancelConfirm();
 }
 
 function exitConfirmUI() {
   document.getElementById('confirmOv').classList.remove('on');
+  document.getElementById('coFace').classList.remove('on');
+  document.getElementById('coLive').classList.remove('on');
   document.getElementById('btnCancel').classList.remove('on');
   document.getElementById('faceRing').classList.remove('hidden');
   document.getElementById('coTimer').textContent = '';
@@ -754,12 +1245,52 @@ function setIdleBtn(msg='Aguardando rosto…') {
   btn.textContent = msg;
 }
 
+// ─── FOTO DE AUDITORIA ──────────────────────────────────────────────────────
+// Nenhum algoritmo de reconhecimento é infalível — então guarde a prova. Com a
+// miniatura na planilha, um registro errado deixa de ser invisível: dá para
+// conferir quem realmente estava na câmera e corrigir o cadastro depois.
+// Roda uma detecção nova (a pessoa pode ter se mexido desde o scanning); se não
+// achar rosto, recorta pela última caixa conhecida; no pior caso, o quadro todo.
+async function capturarFoto() {
+  if (!fotoOn || video.readyState < 2) return null;
+  try {
+    let box = lastBox;
+    try {
+      const det = await faceapi.detectSingleFace(video, OPTS);
+      if (det) box = det.box;
+    } catch(_) {}
+
+    const c   = document.createElement('canvas');
+    c.width = c.height = FOTO_LADO;
+    const ctx = c.getContext('2d');
+
+    if (box) {
+      // Recorte quadrado centrado no rosto, com folga para pegar cabelo/ombros.
+      const lado = Math.max(box.width, box.height) * 1.6;
+      const cx   = box.x + box.width  / 2;
+      const cy   = box.y + box.height / 2;
+      const sx   = Math.max(0, Math.min(video.videoWidth  - lado, cx - lado/2));
+      const sy   = Math.max(0, Math.min(video.videoHeight - lado, cy - lado/2));
+      ctx.drawImage(video, sx, sy, lado, lado, 0, 0, FOTO_LADO, FOTO_LADO);
+    } else {
+      ctx.drawImage(video, 0, 0, FOTO_LADO, FOTO_LADO);
+    }
+    return c.toDataURL('image/jpeg', FOTO_QUALIDADE);
+  } catch(_) { return null; }
+}
+
 // ─── REGISTRO DA SAÍDA ──────────────────────────────────────────────────────
 async function confirmPunch(method) {
   if (mode !== 'confirming' || !curMatch) return;
 
+  // Vale também para o botão: sem isso, bastaria segurar uma foto e tocar na tela.
+  if (!liveOk) { toast('Pisque ou mexa a cabeça para confirmar que é você.', 2500); return; }
+
   const match = curMatch;
   mode = 'done';                       // trava o loop imediatamente (evita duplo registro)
+
+  // Antes de qualquer await longo (GPS leva até 3,5s): a pessoa ainda está enquadrada.
+  const foto = await capturarFoto();
   exitConfirmUI();
 
   const btn = document.getElementById('btnPunch');
@@ -774,6 +1305,7 @@ async function confirmPunch(method) {
     toast(blockMsg(block), 4500);
     curMatch = null;
     mode     = 'scanning';
+    resetStreak();
     setIdleBtn();
     return;
   }
@@ -797,9 +1329,14 @@ async function confirmPunch(method) {
     timestamp    : now.toISOString(),
     locationName : locNm,
     lat, lon,
+    foto,                              // miniatura JPEG (data URL) — some após sincronizar
+    dist         : match.dist   != null ? +match.dist.toFixed(3)   : null,
+    margem       : match.margem != null ? +match.margem.toFixed(3) : null,
+    rigor        : rigorNome,
     synced       : false,
   };
   await dbPut('punches', rec);
+  await aprender(match);
 
   // Tela de sucesso
   document.getElementById('doneName').textContent = match.name;
@@ -816,8 +1353,37 @@ async function confirmPunch(method) {
     document.getElementById('doneOv').classList.remove('on');
     curMatch = null;
     mode     = 'scanning';
+    resetStreak();
     setIdleBtn();
   }, DONE_DURATION);
+}
+
+// ─── GALERIA ADAPTATIVA ─────────────────────────────────────────────────────
+// Só aprende de registros que a própria pessoa confirmou (supervisão humana) E
+// que foram reconhecimentos folgados. Um exemplo aprendido de um match duvidoso
+// contaminaria o cadastro para sempre — por isso os limites são bem mais duros
+// que os do reconhecimento normal.
+async function aprender(match) {
+  if (!adaptOn || !match.desc || match.id == null) return;
+  if (match.dist == null || match.dist > ADAPT_DIST_MAX) return;
+  if (match.margem == null || match.margem < ADAPT_MARGEM) return;
+
+  try {
+    const u = await dbGet('users', match.id);
+    if (!u || u.blocked) return;
+
+    const novo  = Float32Array.from(match.desc);
+    const atual = (u.descs || []).concat(u.auto || []).map(d => Float32Array.from(d));
+
+    // Se já existe algo praticamente igual, guardar de novo só engorda o cadastro
+    // sem cobrir nenhuma condição nova de luz ou ângulo.
+    if (atual.some(d => euclid(novo, d) < ADAPT_DIVERSO)) return;
+
+    u.auto = (u.auto || []).concat([Array.from(novo)]).slice(-ADAPT_MAX);  // FIFO
+    delete u.descF; delete u.autoF;          // caches derivados
+    await dbPut('users', u);
+    await loadUsers();
+  } catch(_) {}                              // aprender é bônus: nunca derruba o registro
 }
 
 // ─── SYNC ────────────────────────────────────────────────────────────────────
@@ -842,7 +1408,9 @@ async function syncNow(silent=false) {
     });
     const json = await r.json();
     if (json.ok) {
-      for (const p of pending) { p.synced=true; await dbPut('punches',p); }
+      // A foto já está na planilha: apagar a cópia local evita que o IndexedDB
+      // cresça alguns KB por registro para sempre.
+      for (const p of pending) { p.synced=true; delete p.foto; await dbPut('punches',p); }
       if(!silent) toast(`${pending.length} registro(s) sincronizado(s)! ✓`);
       if(adminOpen) renderPlog();
     } else {
@@ -869,6 +1437,10 @@ async function goAdmin() {
   document.getElementById('cfgUrl').value     = await getCfg('webhook', WEBHOOK_PADRAO);
   document.getElementById('cfgPin').value     = '';
   document.getElementById('cfgMinH').value    = minHours;
+  document.getElementById('cfgRigor').value   = rigorNome;
+  document.getElementById('cfgPhoto').checked = fotoOn;
+  document.getElementById('cfgLive').checked  = liveOn;
+  document.getElementById('cfgAdapt').checked = adaptOn;
   document.getElementById('cfgWake').checked  = wakeWanted;
   document.getElementById('cfgGesture').checked = gestureOn;
   renderUserList();
@@ -881,6 +1453,7 @@ async function goAdmin() {
 function goBack() {
   adminOpen = false;
   mode      = 'scanning';
+  resetStreak();
   setIdleBtn();
   document.getElementById('vAdmin').classList.remove('active');
   document.getElementById('vPunch').classList.add('active');
@@ -900,14 +1473,26 @@ async function saveSettings() {
 
   const wake = document.getElementById('cfgWake').checked;
   const gest = document.getElementById('cfgGesture').checked;
+  const rig  = document.getElementById('cfgRigor').value;
+  const fot  = document.getElementById('cfgPhoto').checked;
+  const liv  = document.getElementById('cfgLive').checked;
+  const adp  = document.getElementById('cfgAdapt').checked;
 
   await setCfg('loc', loc);
   await setCfg('webhook', url);
   if (pin.length >= 4) await setCfg('pin', pin);
   await setCfg('minhours', hrs);
+  await setCfg('rigor', rig);
+  await setCfg('foto', fot);
+  await setCfg('live', liv);
+  await setCfg('adapt', adp);
   await setCfg('wake', wake);
   await setCfg('gesture', gest);
 
+  setRigor(rig);
+  fotoOn     = fot;
+  liveOn     = liv;
+  adaptOn    = adp;
   minHours   = hrs;
   wakeWanted = wake;
   if (wake) acquireWakeLock(); else releaseWakeLock();
@@ -922,15 +1507,33 @@ async function saveSettings() {
 function renderUserList() {
   const el = document.getElementById('userList');
   if (!users.length) { el.innerHTML='<p class="empty-msg">Nenhum funcionário cadastrado.</p>'; return; }
-  el.innerHTML = users.map(u=>`
+  el.innerHTML = users.map(u=>{
+    const auto = (u.auto||[]).length;
+    return `
     <div class="user-item">
       <img class="uavatar" src="${u.thumb||''}" onerror="this.style.visibility='hidden'">
       <div class="uinfo">
-        <div class="uname">${esc(u.name)}</div>
-        <div class="uphotos">${u.descs.length} foto(s)</div>
+        <div class="uname">${esc(u.name)}${u.blocked?' <span class="tag-vis">visitante</span>':''}</div>
+        <div class="uphotos">${u.descs.length} foto(s)${auto?` · ${auto} aprendida(s)`:''}</div>
       </div>
       <button class="btn btn-orange btn-sm" onclick="delUser(${u.id})">Remover</button>
-    </div>`).join('');
+    </div>`;}).join('');
+}
+
+// Escape se a galeria adaptativa derivar (ex.: alguém foi aprendido em condição
+// ruim). Volta todo mundo ao cadastro original, sem apagar ninguém.
+async function esquecerAuto() {
+  const n = users.reduce((s,u)=>s+(u.auto||[]).length, 0);
+  if (!n) { toast('Nada foi aprendido ainda.'); return; }
+  if (!confirm(`Descartar as ${n} leitura(s) aprendidas e voltar só ao cadastro original?`)) return;
+  for (const u of await dbAll('users')) {
+    if (!(u.auto||[]).length) continue;
+    delete u.auto; delete u.descF; delete u.autoF;
+    await dbPut('users', u);
+  }
+  await loadUsers();
+  renderUserList();
+  toast(`${n} leitura(s) descartadas.`);
 }
 
 async function renderPlog() {
@@ -971,21 +1574,22 @@ async function delUser(id) {
   renderUserList();
 }
 
+function setRigor(nome) {
+  rigorNome = RIGOR[nome] ? nome : DEFAULT_RIGOR;
+  rigor     = RIGOR[rigorNome];
+  resetStreak();
+}
+
 // ─── LOAD USERS ──────────────────────────────────────────────────────────────
 async function loadUsers() {
   users = await dbAll('users');
-  buildMatcher();
-}
-
-function buildMatcher() {
-  if (!users.length) { matcher = null; return; }
-  try {
-    const labeled = users.map(u =>
-      new faceapi.LabeledFaceDescriptors(u.name,
-        u.descs.map(d => new Float32Array(d)))
-    );
-    matcher = new faceapi.FaceMatcher(labeled, 0.6);
-  } catch(_) { matcher = null; }
+  // Descritores em Float32Array uma vez só — a comparação roda a cada 350ms.
+  for (const u of users) {
+    u.descF = (u.descs || []).map(d => Float32Array.from(d));
+    u.autoF = (u.auto  || []).map(d => Float32Array.from(d));
+  }
+  users = users.filter(u => u.descF.length);
+  resetStreak();
 }
 
 // ─── REGISTER MODAL ──────────────────────────────────────────────────────────
@@ -993,6 +1597,7 @@ async function openReg() {
   regDescs  = [];
   regThumbs = [];
   document.getElementById('regName').value    = '';
+  document.getElementById('regBlocked').checked = false;
   document.getElementById('thumbs').innerHTML = '';
   document.getElementById('regStatus').textContent = 'Tire 3 fotos para melhor precisão (mínimo 1).';
   document.getElementById('btnSave').disabled = true;
@@ -1034,6 +1639,14 @@ async function capture() {
     return;
   }
 
+  // Cadastro ruim contamina TODAS as comparações futuras — é a origem mais comum
+  // de identificação equivocada. Exige aqui a mesma qualidade cobrada no scanning.
+  const q = faceQuality(det, rv.videoWidth);
+  if (!q.ok) {
+    document.getElementById('regStatus').textContent = `⚠ ${q.msg} e capture de novo.`;
+    return;
+  }
+
   const c   = document.createElement('canvas');
   const pad = 20;
   const bx  = det.detection.box;
@@ -1063,22 +1676,53 @@ async function saveUser() {
   if (!name)            { toast('Informe o nome do funcionário.'); return; }
   if (!regDescs.length) { toast('Capture ao menos 1 foto.'); return; }
 
+  const blocked = document.getElementById('regBlocked').checked;
+
+  // Dois cadastros parecidos demais deixam o sistema permanentemente ambíguo:
+  // o teste de margem passaria a recusar os dois. Melhor barrar na entrada.
+  const media = regDescs
+    .map(d => Float32Array.from(d))
+    .map(d => users
+      .filter(u => u.name.toLowerCase() !== name.toLowerCase())
+      .map(u => ({ nome: u.name, dist: distToUser(d, u) })))
+    .flat()
+    .sort((a,b) => a.dist - b.dist)[0];
+
+  if (media && media.dist < CROSS_MIN_DIST) {
+    // Para um visitante, ficar parecido com um funcionário é justamente o motivo
+    // de cadastrá-lo — o app passa a saber que aquele rosto não é do quadro.
+    const aviso = blocked
+      ? `Este rosto é parecido com o de "${media.nome}" (distância ${media.dist.toFixed(2)}) — ` +
+        `provavelmente é essa a confusão que você quer resolver.\n\n` +
+        `Cadastrar como visitante faz o app parar de oferecer o ponto de "${media.nome}" ` +
+        `para essa pessoa. Continuar?`
+      : `⚠ Este rosto ficou muito parecido com o cadastro de "${media.nome}" ` +
+        `(distância ${media.dist.toFixed(2)}).\n\n` +
+        `Salvar assim tende a trocar as duas pessoas na hora do registro. ` +
+        `Recomendado: refazer as fotos com boa luz e de frente.\n\nSalvar mesmo assim?`;
+    if (!confirm(aviso)) return;
+  }
+
   const existing = users.find(u=>u.name.toLowerCase()===name.toLowerCase());
   if (existing) {
     if (!confirm(`"${name}" já está cadastrado. Substituir as fotos?`)) return;
-    existing.descs = regDescs;
-    existing.thumb = regThumbs[0];
+    existing.descs   = regDescs;
+    existing.thumb   = regThumbs[0];
+    existing.blocked = blocked;
+    delete existing.auto;               // fotos aprendidas eram do cadastro antigo
+    delete existing.descF; delete existing.autoF;   // caches derivados
     await dbPut('users', existing);
   } else {
     await dbPut('users', {
       name,
       descs: regDescs,
       thumb: regThumbs[0],
+      blocked,
       at   : new Date().toISOString(),
     });
   }
 
-  toast(`"${name}" cadastrado com sucesso! ✓`);
+  toast(`"${name}" cadastrado como ${blocked?'visitante':'funcionário'}! ✓`);
   closeReg();
   await loadUsers();
   renderUserList();

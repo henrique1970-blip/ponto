@@ -8,7 +8,7 @@
 
 // Ao trocar ícones/manifest, suba a versão: é o que faz o celular descartar o
 // cache antigo e buscar os arquivos novos.
-const CACHE = 'ponto-saida-v3';
+const CACHE = 'ponto-saida-v5';
 
 // Mesma origem — precisa funcionar para o app abrir offline.
 const CORE = [
