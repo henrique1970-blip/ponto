@@ -6,8 +6,15 @@
 //  - CDN (lib/modelos): cache-first (grandes e imutáveis).
 //  - Mensagens PRECACHE_ALL / CACHE_STATUS: a tela de Admin baixa e confere
 //    tudo sob demanda, com barra de progresso.
-
-const CACHE = 'ponto-v4';
+//
+// Dois caches, de propósito:
+//   CACHE_APP  é versionado e trocado a cada mudança nos arquivos locais.
+//   CACHE_LIB  guarda os ~7,5 MB do CDN e NÃO é versionado junto — assim
+//   publicar uma correção no index.html não obriga o aparelho a rebaixar os
+//   modelos (o que, no 4G do campo, é justamente o que não pode acontecer).
+const CACHE_APP = 'ponto-app-v5';
+const CACHE_LIB = 'ponto-lib-v1';
+const MANTER    = [CACHE_APP, CACHE_LIB];
 
 // Mesma origem. Só os três primeiros são críticos para o app abrir offline;
 // os ícones entram best-effort para não derrubar a instalação se faltar um.
@@ -39,22 +46,52 @@ const REMOTE = [
 
 const ALL = CORE.concat(REMOTE);
 
+// Cada URL sabe em qual cache mora — usado pelo precache e pela conferência.
+const cacheDe = url => (REMOTE.indexOf(url) >= 0 ? CACHE_LIB : CACHE_APP);
+
 // ── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
-    const c = await caches.open(CACHE);
-    await c.addAll(CORE.slice(0, CRITICO));                       // crítico
-    await Promise.allSettled(CORE.slice(CRITICO).map(u => c.add(u)));
-    await Promise.allSettled(REMOTE.map(u => c.add(u)));          // best-effort
+    const app = await caches.open(CACHE_APP);
+    await app.addAll(CORE.slice(0, CRITICO));                       // crítico
+    await Promise.allSettled(CORE.slice(CRITICO).map(u => app.add(u)));
+
+    const lib = await caches.open(CACHE_LIB);
+    await herdaModelos(lib);
+
+    // Modelos: só baixa o que ainda não está guardado. Numa atualização do app
+    // isto é praticamente instantâneo — o CACHE_LIB sobreviveu.
+    await Promise.allSettled(REMOTE.map(async u => {
+      if (await lib.match(u)) return;
+      return lib.add(u);
+    }));
+
     await self.skipWaiting();
   })());
 });
+
+// Aparelho que já vinha do cache único (`ponto-v4`): os modelos estão lá, e o
+// `activate` vai apagar aquele cache inteiro. Traz os 7,5 MB para o CACHE_LIB
+// antes disso — senão a atualização que criou a separação seria justamente a
+// que obrigaria todo mundo a baixar tudo de novo.
+async function herdaModelos(lib) {
+  const keys = await caches.keys();
+  for (const k of keys) {
+    if (MANTER.indexOf(k) >= 0) continue;
+    const velho = await caches.open(k);
+    for (const u of REMOTE) {
+      if (await lib.match(u)) continue;
+      const res = await velho.match(u);
+      if (res) await lib.put(u, res);
+    }
+  }
+}
 
 // ── Activate ─────────────────────────────────────────────────────────────────
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => MANTER.indexOf(k) < 0).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -71,13 +108,14 @@ self.addEventListener('message', e => {
 // Baixa tudo de novo, um a um, reportando progresso. `cache:'reload'` obriga a
 // buscar da rede em vez de reaproveitar o cache HTTP do navegador.
 async function precacheAll(port) {
-  const c = await caches.open(CACHE);
+  const app = await caches.open(CACHE_APP);
+  const lib = await caches.open(CACHE_LIB);
   let done = 0, fail = 0;
   for (const u of ALL) {
     try {
       const res = await fetch(new Request(u, {cache:'reload'}));
       if (!res || !res.ok) throw new Error('HTTP ' + (res && res.status));
-      await c.put(u, res);
+      await (cacheDe(u) === CACHE_LIB ? lib : app).put(u, res);
     } catch (_) { fail++; }
     done++;
     if (port) port.postMessage({type:'PROGRESS', done, total: ALL.length, fail});
@@ -86,9 +124,10 @@ async function precacheAll(port) {
 }
 
 async function cacheStatus(port) {
-  const c = await caches.open(CACHE);
+  const app = await caches.open(CACHE_APP);
+  const lib = await caches.open(CACHE_LIB);
   let have = 0;
-  for (const u of ALL) if (await c.match(u)) have++;
+  for (const u of ALL) if (await (cacheDe(u) === CACHE_LIB ? lib : app).match(u)) have++;
   if (port) port.postMessage({type:'STATUS', have, total: ALL.length});
 }
 
@@ -122,7 +161,7 @@ async function cacheFirst(req) {
   try {
     const res = await fetch(req);
     if (res && (res.ok || res.type === 'opaque')) {
-      const c = await caches.open(CACHE);
+      const c = await caches.open(CACHE_LIB);
       c.put(req, res.clone());
     }
     return res;
@@ -135,7 +174,7 @@ async function networkFirst(req) {
   try {
     const res = await fetch(req);
     if (res && res.ok) {
-      const c = await caches.open(CACHE);
+      const c = await caches.open(CACHE_APP);
       c.put(req, res.clone());
     }
     return res;
