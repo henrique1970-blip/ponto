@@ -12,7 +12,10 @@
 //   CACHE_LIB  guarda os ~7,5 MB do CDN e NÃO é versionado junto — assim
 //   publicar uma correção no index.html não obriga o aparelho a rebaixar os
 //   modelos (o que, no 4G do campo, é justamente o que não pode acontecer).
-const CACHE_APP = 'ponto-app-v5';
+// v6: o `index.html` do v5 foi ao ar com a política de localização errada
+// (§11.1 do handoff). O bump garante que o `activate` descarte aquele arquivo
+// em vez de deixá-lo servível a partir do cache.
+const CACHE_APP = 'ponto-app-v6';
 const CACHE_LIB = 'ponto-lib-v1';
 const MANTER    = [CACHE_APP, CACHE_LIB];
 
