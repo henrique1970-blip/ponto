@@ -19,6 +19,16 @@
 const TZ    = 'America/Sao_Paulo';
 const ABA   = 'Saidas';
 
+// Selo da versao implantada. Colar o codigo neste editor NAO muda o que a URL
+// /exec executa -- a implantacao aponta para uma versao congelada, e so
+// "Gerenciar implantacoes -> editar -> Nova versao" a move. Sem este selo nao
+// havia como saber, de fora, qual codigo estava no ar: a /exec respondia a
+// mesma coisa nas duas versoes.
+//
+// Abrir a /exec no navegador passa a mostrar este texto. Suba o numero sempre
+// que mexer em algo que a /exec faz.
+const VERSAO = 'v2 - Tipo dinamico (Entrada/Saida)';
+
 // A 'Chave' precisa continuar na coluna 10: linhas antigas já foram gravadas com
 // ela ali, e é por ela que a deduplicação reconhece um reenvio. Colunas novas
 // entram DEPOIS dela.
@@ -107,7 +117,7 @@ function doPost(e) {
 }
 
 function doGet() {
-  return ContentService.createTextOutput('Ponto Saida OK')
+  return ContentService.createTextOutput('Ponto Saida OK - ' + VERSAO)
     .setMimeType(ContentService.MimeType.TEXT);
 }
 
@@ -125,6 +135,7 @@ function autorizar() {
 // registrar um ponto de verdade para descobrir.
 function diagnostico() {
   const linhas = [];
+  linhas.push('Versao:   ' + VERSAO);
   linhas.push('Planilha: ' + SpreadsheetApp.getActiveSpreadsheet().getName());
   linhas.push('Conta:    ' + (Session.getEffectiveUser().getEmail() || '(oculta)'));
   try {
