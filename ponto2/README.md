@@ -262,6 +262,24 @@ de madrugada. Duas configurações governam isso, em **Admin → Configurações
   tela de sucesso some em ~3 s e a pessoa ainda está enquadrada; sem esse prazo
   o 👍 seguinte fecharia a jornada recém-aberta.
 
+### Cortar a jornada na meia-noite
+
+A operação pode preferir encerrar a jornada antes das 00:00 e reabri-la depois,
+para que **cada dia da planilha feche com os pares completos** — é a política
+usada no app da raiz, onde o pareamento é por data. Exemplo: entrada 16:00,
+saída 23:50, entrada 00:05, saída 08:00.
+
+Isso é **uma jornada partida em dois dias**, não duas jornadas — por isso a
+trava de 12h entre jornadas vale só **dentro do mesmo dia civil**. Virando o
+dia, a reabertura é liberada na hora, respeitando apenas o intervalo curto
+(5 min), que continua impedindo a reabertura acidental logo depois da tela de
+sucesso. Sem essa exceção a noite inteira se perderia: a pessoa não conseguiria
+nem reabrir às 00:05 nem bater a saída às 08:00.
+
+**Cortar é opcional.** Quem não cortar continua fechando o turno pela jornada
+aberta (`23:00 → 04:00` funciona sem nenhum corte). A regra aceita as duas
+operações, então esquecer de cortar não quebra par nenhum.
+
 > ⚠️ **A planilha precisa do Apps Script novo.** A coluna `Tipo` era literal
 > `'Saída'`; agora segue o tipo do registro. Sem reimplantar o
 > `apps-script.gs`, as entradas chegam rotuladas como saída.

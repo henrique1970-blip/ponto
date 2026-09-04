@@ -28,12 +28,20 @@ let minHours = 12;
 let jornadaH = 16;
 let minEntre = 5;
 
+// Relógio simulado. `NOW = null` usa a hora real — é assim que roda a maior
+// parte do arquivo; os testes do corte de meia-noite cravam um instante.
+let NOW = null;
+class FakeDate extends Date {
+  constructor(...a) { if (a.length === 0) super(NOW === null ? Date.now() : NOW); else super(...a); }
+  static now() { return NOW === null ? Date.now() : NOW; }
+}
+
 const ctx = vm.createContext({
   get minHours(){ return minHours; },
   get jornadaH(){ return jornadaH; },
   get minEntre(){ return minEntre; },
   dbAll: async () => punches,
-  Date, console,
+  Date: FakeDate, console,
 });
 vm.runInContext(REGRA, ctx);
 
@@ -141,6 +149,59 @@ const DUPLO    = { name: 'Beto Duplo',   duplo: true  };
   punches = [];
   p = await plano({ name: 'Cadastro Antigo' });
   ok(p.type === 'exit', 'usuário sem o campo `duplo` continua só-saída');
+
+  console.log('\n【6】 Corte de meia-noite — a jornada partida em dois dias');
+  // A operação pode encerrar a jornada antes das 00:00 e reabrir depois, para
+  // que cada dia da planilha feche com os pares completos. Isso é UMA jornada,
+  // não duas: a trava de 12h entre jornadas não pode valer na virada, senão a
+  // noite inteira se perde (a pessoa não reabre e nem consegue bater a saída).
+  const dia  = (d, hh, mm, ss = 0) => new Date(2026, 8, d, hh, mm, ss).getTime();
+  const em   = ms => { NOW = ms; };
+  // `reg` (no topo) recebe ISO; aqui é mais legível cravar o instante.
+  const marca = (type, ms, quem = DUPLO.name) => reg(quem, type, new Date(ms).toISOString());
+
+  punches = [marca('entry', dia(7, 16, 0)), marca('exit', dia(7, 23, 50))];
+  em(dia(8, 0, 5));
+  p = await plano(DUPLO);
+  ok(p.type === 'entry' && !p.block,
+     'saída 23:50, reabertura 00:05 → Entrada liberada', JSON.stringify(p.block || {}));
+
+  punches.push(marca('entry', dia(8, 0, 5)));
+  em(dia(8, 8, 0));
+  p = await plano(DUPLO);
+  ok(p.type === 'exit' && !p.block, 'e às 08:00 a saída sai normalmente');
+
+  // A trava longa continua valendo DENTRO do dia: sem isso, qualquer um
+  // reabriria uma jornada nova logo depois de encerrar a sua.
+  punches = [marca('entry', dia(7, 16, 0)), marca('exit', dia(7, 23, 50))];
+  em(dia(7, 23, 52));
+  p = await plano(DUPLO);
+  ok(p.type === 'entry' && !!p.block,
+     'reabrir 2min depois, no MESMO dia → travado pelas 12h');
+
+  // E a virada não pode virar atalho para o toque duplo: o intervalo curto
+  // continua separando a saída da reabertura.
+  punches = [marca('entry', dia(7, 16, 0)), marca('exit', dia(7, 23, 59, 50))];
+  em(dia(8, 0, 0, 30));
+  p = await plano(DUPLO);
+  ok(p.type === 'entry' && !!p.block,
+     'reabrir 40s depois, já no dia seguinte → travado pelo intervalo curto');
+
+  // E quem NÃO cortar continua fechando o turno sozinho, como antes.
+  punches = [marca('entry', dia(7, 23, 0))];
+  em(dia(8, 4, 0));
+  p = await plano(DUPLO);
+  ok(p.type === 'exit' && !p.block,
+     'sem corte: entrada 23:00 → às 04:00 ainda é Saída');
+
+  // Só-saída não é afetado por nada disso.
+  punches = [marca('exit', dia(7, 23, 50), SO_SAIDA.name)];
+  em(dia(8, 0, 5));
+  p = await plano(SO_SAIDA);
+  ok(p.type === 'exit' && !!p.block,
+     'quem é só-saída continua travado 12h, mesmo virando o dia');
+
+  NOW = null;
 
   console.log('\n' + (falhas ? `❌ ${falhas} falha(s)` : '✅ todos os testes passaram'));
   process.exit(falhas ? 1 : 0);
