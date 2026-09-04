@@ -11,7 +11,8 @@
 // v7: cadastro passou a ter "entrada e saída" por funcionário.
 // v8: a trava de 12h deixou de valer na virada do dia, para permitir cortar a
 //     jornada na meia-noite.
-const CACHE = 'ponto-saida-v8';
+// v9: cadastro ganhou "plantão" — várias entradas e saídas por dia.
+const CACHE = 'ponto-saida-v9';
 
 // Mesma origem — precisa funcionar para o app abrir offline.
 const CORE = [

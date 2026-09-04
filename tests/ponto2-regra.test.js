@@ -58,6 +58,7 @@ const plano = user => ctx.planoDoRegistro(user);
 
 const SO_SAIDA = { name: 'Ana Só-Saída', duplo: false };
 const DUPLO    = { name: 'Beto Duplo',   duplo: true  };
+const PLANTAO  = { name: 'Lincon',       duplo: true, plantao: true };
 
 (async () => {
 
@@ -155,7 +156,7 @@ const DUPLO    = { name: 'Beto Duplo',   duplo: true  };
   // que cada dia da planilha feche com os pares completos. Isso é UMA jornada,
   // não duas: a trava de 12h entre jornadas não pode valer na virada, senão a
   // noite inteira se perde (a pessoa não reabre e nem consegue bater a saída).
-  const dia  = (d, hh, mm, ss = 0) => new Date(2026, 8, d, hh, mm, ss).getTime();
+  const dia  = (d, hh, mm, ss = 0) => new Date(2026, 8, d, hh, mm, ss).getTime();  // usado tb no 【7】
   const em   = ms => { NOW = ms; };
   // `reg` (no topo) recebe ISO; aqui é mais legível cravar o instante.
   const marca = (type, ms, quem = DUPLO.name) => reg(quem, type, new Date(ms).toISOString());
@@ -200,6 +201,53 @@ const DUPLO    = { name: 'Beto Duplo',   duplo: true  };
   p = await plano(SO_SAIDA);
   ok(p.type === 'exit' && !!p.block,
      'quem é só-saída continua travado 12h, mesmo virando o dia');
+
+  console.log('\n【7】 Plantão — sair e voltar é o trabalho, não uma jornada nova');
+  // Quem faz ronda (pivôs, chamado noturno) sai e volta várias vezes na mesma
+  // noite. A trava de 12h pressupõe uma jornada por dia: barrava a volta e,
+  // pior, deixava a marcação seguinte entrar com o tipo trocado.
+  const noite = [
+    [dia(7, 19,  0), 'entry', 'chega'],
+    [dia(7, 21, 30), 'exit',  'sai para o pivô 3'],
+    [dia(7, 22, 40), 'entry', 'volta'],
+    [dia(8,  0, 10), 'exit',  'sai para o pivô 7'],
+    [dia(8,  1, 20), 'entry', 'volta'],
+    [dia(8,  5, 30), 'exit',  'fim do plantão'],
+  ];
+  punches = [];
+  let okNoite = true, detalhe = '';
+  for (const [ms, esperado, rotulo] of noite) {
+    em(ms);
+    const r = await plano(PLANTAO);
+    if (r.block || r.type !== esperado) {
+      okNoite = false;
+      detalhe = rotulo + ' → ' + (r.block ? 'BLOQUEADO' : r.type);
+      break;
+    }
+    punches.push(marca(esperado, ms, PLANTAO.name));
+  }
+  ok(okNoite, 'as 6 marcações da noite passam, todas com o tipo certo', detalhe);
+  ok(punches.length === 6, 'e as 6 chegam ao banco', 'entraram ' + punches.length);
+
+  // O intervalo curto continua valendo: plantão não é licença para toque duplo.
+  punches = [marca('entry', dia(7, 19, 0), PLANTAO.name),
+             marca('exit',  dia(7, 21, 30), PLANTAO.name)];
+  em(dia(7, 21, 32));
+  p = await plano(PLANTAO);
+  ok(p.type === 'entry' && !!p.block, 'voltar 2min depois ainda é travado pelo intervalo curto');
+
+  // E quem NÃO é plantão continua com uma jornada por dia.
+  punches = [marca('entry', dia(7, 19, 0)), marca('exit', dia(7, 21, 30))];
+  em(dia(7, 22, 40));
+  p = await plano(DUPLO);
+  ok(p.type === 'entry' && !!p.block,
+     'entrada+saída sem plantão: a volta no mesmo dia continua travada 12h');
+
+  // Cadastro incoerente (plantão sem entrada+saída) não pode virar outra coisa.
+  punches = [];
+  em(dia(7, 19, 0));
+  p = await plano({ name: 'Fantasma', plantao: true });
+  ok(p.type === 'exit', 'plantão sem `duplo` continua sendo só-saída');
 
   NOW = null;
 

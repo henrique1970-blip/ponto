@@ -136,6 +136,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
   background:#FEF3C7;color:#92400E;border-radius:5px;padding:1px 5px;vertical-align:middle}
 .tag-duplo{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   background:#DCFCE7;color:#166534;border-radius:5px;padding:1px 5px;vertical-align:middle}
+.tag-plantao{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  background:#DBEAFE;color:#1E40AF;border-radius:5px;padding:1px 5px;vertical-align:middle}
 .empty-msg{font-size:.85rem;color:var(--text2);text-align:center;padding:12px 0}
 
 /* ---- PUNCH LOG ---- */
@@ -277,6 +279,8 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         Virando o dia, a pessoa pode reabrir na hora: é o que permite
         <b>cortar a jornada na meia-noite</b> (saída 23:50, entrada 00:05) sem perder a
         noite. Nesse caso vale só o intervalo curto abaixo.
+        Não vale para quem está marcado como <b>plantão</b> no cadastro — para esses,
+        sair e voltar é o trabalho, e só o intervalo curto abaixo se aplica.
         Padrão: <b>12h</b>. Use <b>0</b> para desligar a trava (não recomendado).</p>
 
       <div class="field">
@@ -394,12 +398,21 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
     <p class="hint">Marque para pessoas que passam na frente do totem mas não são do quadro.
       Cadastrá-las evita que o app as confunda com um funcionário parecido.</p>
     <div class="field-chk">
-      <input id="regDuplo" type="checkbox">
+      <input id="regDuplo" type="checkbox"
+             onchange="if(!this.checked) document.getElementById('regPlantao').checked = false">
       <label for="regDuplo">Registra <b>entrada e saída</b> neste aparelho</label>
     </div>
     <p class="hint">Sem marcar, a pessoa segue registrando <b>só a saída</b> — o comportamento
       padrão deste app. Marcado, o app alterna: a primeira marcação da jornada é a entrada,
       a seguinte é a saída.</p>
+    <div class="field-chk">
+      <input id="regPlantao" type="checkbox"
+             onchange="if(this.checked) document.getElementById('regDuplo').checked = true">
+      <label for="regPlantao">Plantão — <b>várias entradas e saídas por dia</b></label>
+    </div>
+    <p class="hint">Para quem sai e volta durante o turno — ronda de pivô, chamado noturno.
+      Sem isto, a pessoa registra <b>uma jornada por dia</b> e a trava de 12h barra a segunda.
+      Marcar aqui liga também "entrada e saída", que é o modo em que o plantão faz sentido.</p>
     <video id="regVideo" class="reg-video" autoplay muted playsinline></video>
     <div class="thumbs" id="thumbs"></div>
     <div class="reg-status" id="regStatus">Tire 3 fotos para melhor precisão (mínimo 1).</div>
@@ -1059,6 +1072,7 @@ async function detect() {
     name  : p1.name,
     type  : plano.type,
     duplo : !!p1.user.duplo,
+    plantao: !!p1.user.plantao,
     dist  : p1.dist,
     margem: p2 ? p2.dist - p1.dist : null,
     thumb : p1.user.thumb || '',
@@ -1069,7 +1083,8 @@ async function detect() {
 
 // ─── O QUE ESTA PESSOA REGISTRA AGORA ───────────────────────────────────────
 // Por padrão este app é de SAÍDA — e continua sendo para todo mundo. Quem está
-// marcado com `duplo` no cadastro registra entrada e saída, alternando.
+// marcado com `duplo` no cadastro registra entrada e saída, alternando; quem
+// também está marcado com `plantao` pode fazer isso VÁRIAS VEZES no mesmo dia.
 //
 // Devolve { type:'entry'|'exit', block:null|{last,freeAt} }. `block` preenchido
 // significa: é essa a marcação que falta, mas ainda não está liberada.
@@ -1104,9 +1119,14 @@ async function planoDoRegistro(user) {
   // intervalo curto, que continua impedindo a reabertura acidental logo depois
   // da tela de sucesso.
   if (!last || last.type !== 'exit') return { type: 'entry', block: null };
+
+  // Plantão: sair e voltar é o trabalho, não uma segunda jornada. A trava longa
+  // pressupõe uma jornada por dia — para quem faz ronda ela recusava a volta e,
+  // pior, a marcação seguinte entrava com o tipo trocado. Vale só o curto.
+  const semTravaLonga = user.plantao || !mesmoDia(last);
   return {
     type : 'entry',
-    block: mesmoDia(last) ? travaHoras(last, minHours) : travaMinutos(last, minEntre),
+    block: semTravaLonga ? travaMinutos(last, minEntre) : travaHoras(last, minHours),
   };
 }
 
@@ -1480,7 +1500,9 @@ async function confirmPunch(method) {
   // sai desta revalidação, não do que a tela mostrou — se a janela de jornada
   // virou no meio da confirmação, vale a regra, e a tela de sucesso dirá a
   // verdade porque também lê daqui.
-  const plano = await planoDoRegistro({ name: match.name, duplo: match.duplo });
+  const plano = await planoDoRegistro({
+    name: match.name, duplo: match.duplo, plantao: match.plantao,
+  });
   if (plano.block) {
     toast(blockMsg(plano.block), 4500);
     curMatch = null;
@@ -1714,7 +1736,8 @@ function renderUserList() {
       <img class="uavatar" src="${u.thumb||''}" onerror="this.style.visibility='hidden'">
       <div class="uinfo">
         <div class="uname">${esc(u.name)}${u.blocked?' <span class="tag-vis">visitante</span>':''}${
-          !u.blocked && u.duplo ? ' <span class="tag-duplo">entrada+saída</span>' : ''}</div>
+          !u.blocked && u.duplo ? ' <span class="tag-duplo">entrada+saída</span>' : ''}${
+          !u.blocked && u.plantao ? ' <span class="tag-plantao">plantão</span>' : ''}</div>
         <div class="uphotos">${u.descs.length} foto(s)${auto?` · ${auto} aprendida(s)`:''}</div>
       </div>
       <button class="btn btn-orange btn-sm" onclick="delUser(${u.id})">Remover</button>
@@ -1811,6 +1834,7 @@ async function openReg() {
   document.getElementById('regName').value    = '';
   document.getElementById('regBlocked').checked = false;
   document.getElementById('regDuplo').checked   = false;
+  document.getElementById('regPlantao').checked = false;
   document.getElementById('thumbs').innerHTML = '';
   document.getElementById('regStatus').textContent = 'Tire 3 fotos para melhor precisão (mínimo 1).';
   document.getElementById('btnSave').disabled = true;
@@ -1891,6 +1915,8 @@ async function saveUser() {
 
   const blocked = document.getElementById('regBlocked').checked;
   const duplo   = document.getElementById('regDuplo').checked;
+  // Plantão sem entrada e saída não existe: sem alternância não há "voltar".
+  const plantao = document.getElementById('regPlantao').checked && duplo;
 
   // Dois cadastros parecidos demais deixam o sistema permanentemente ambíguo:
   // o teste de margem passaria a recusar os dois. Melhor barrar na entrada.
@@ -1929,11 +1955,17 @@ async function saveUser() {
     } else if (!existing.duplo && duplo) {
       msg += '\n\n➕ Ele passará a registrar ENTRADA E SAÍDA.';
     }
+    if (existing.plantao && !plantao) {
+      msg += '\n\n⚠ O plantão está DESMARCADO: ele volta a uma jornada por dia.';
+    } else if (!existing.plantao && plantao) {
+      msg += '\n\n➕ Plantão ligado: várias entradas e saídas por dia.';
+    }
     if (!confirm(msg)) return;
     existing.descs   = regDescs;
     existing.thumb   = regThumbs[0];
     existing.blocked = blocked;
     existing.duplo   = duplo;
+    existing.plantao = plantao;
     delete existing.auto;               // fotos aprendidas eram do cadastro antigo
     delete existing.descF; delete existing.autoF;   // caches derivados
     await dbPut('users', existing);
@@ -1944,12 +1976,16 @@ async function saveUser() {
       thumb: regThumbs[0],
       blocked,
       duplo,
+      plantao,
       at   : new Date().toISOString(),
     });
   }
 
   toast(`"${name}" cadastrado como ${
-    blocked ? 'visitante' : duplo ? 'funcionário (entrada e saída)' : 'funcionário (só saída)'}! ✓`);
+    blocked  ? 'visitante'
+    : plantao ? 'funcionário (plantão: várias por dia)'
+    : duplo   ? 'funcionário (entrada e saída)'
+    : 'funcionário (só saída)'}! ✓`);
   closeReg();
   await loadUsers();
   renderUserList();

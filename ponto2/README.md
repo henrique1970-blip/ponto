@@ -262,6 +262,27 @@ de madrugada. Duas configurações governam isso, em **Admin → Configurações
   tela de sucesso some em ~3 s e a pessoa ainda está enquadrada; sem esse prazo
   o 👍 seguinte fecharia a jornada recém-aberta.
 
+### Plantão — várias entradas e saídas por dia
+
+Quem sai e volta durante o turno (ronda de pivô, chamado noturno) marca no
+cadastro a caixa **"Plantão — várias entradas e saídas por dia"**. Ela liga
+junto o "entrada e saída", que é o modo em que o plantão faz sentido, e aparece
+na lista de funcionários com a etiqueta `plantão`.
+
+Para essas pessoas a trava de 12h entre jornadas **não se aplica**: sair e
+voltar é o trabalho, não uma jornada nova. Vale só o intervalo curto (5 min),
+que continua barrando o toque duplo. Uma noite típica:
+
+```
+19:00 Entrada · 21:30 Saída · 22:40 Entrada
+00:10 Saída   · 01:20 Entrada · 05:30 Saída
+```
+
+Sem a marca, a trava de 12h recusaria a volta das 22:40 — e, pior, a marcação
+seguinte entraria com o **tipo trocado** (o app ofereceria "entrada" para quem
+estava saindo), porque a sequência de alternância teria sido quebrada. Quem não
+é plantão continua com uma jornada por dia.
+
 ### Cortar a jornada na meia-noite
 
 A operação pode preferir encerrar a jornada antes das 00:00 e reabri-la depois,
