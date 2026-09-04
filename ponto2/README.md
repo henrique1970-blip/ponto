@@ -3,11 +3,16 @@
 Variante do **Ponto Digital** que registra **apenas a saída**, com uma etapa de
 confirmação explícita após o reconhecimento facial.
 
+Desde 04/09/2026 há uma exceção por funcionário: quem for marcado como
+**"registra entrada e saída"** no cadastro alterna entre as duas marcações neste
+mesmo aparelho. Todo o resto do quadro continua **só na saída** — ver
+*[Entrada e saída para funcionários específicos](#entrada-e-saída-para-funcionários-específicos)*.
+
 ## O que muda em relação ao app original (`../index.html`)
 
 | | Ponto Digital | Ponto Saída (este) |
 |---|---|---|
-| Tipo de registro | Entrada **e** saída (alternava sozinho) | **Somente saída** |
+| Tipo de registro | Entrada **e** saída | **Saída** — e entrada só para quem for marcado no cadastro |
 | Após reconhecer o rosto | Registrava direto no toque do botão | Abre uma **tela de confirmação** |
 | Formas de confirmar | Botão | Botão **ou gesto 👍** (polegar para cima) |
 | Tela do celular | Apaga normalmente | **Fica sempre ligada** (Wake Lock) |
@@ -17,7 +22,8 @@ confirmação explícita após o reconhecimento facial.
 1. **Escaneando** — a câmera procura e reconhece o rosto cadastrado. Só avança
    para quem **chega perto e fica parado ~2 s** (ver *Gatilho de intenção*);
    quem apenas passa na frente não aciona nada.
-2. **Confirmando** — aparece o nome + botão verde `✔ CONFIRMAR SAÍDA`.
+2. **Confirmando** — aparece o nome + botão verde `✔ CONFIRMAR SAÍDA`
+   (`✔ CONFIRMAR ENTRADA` para quem registra os dois, quando é a entrada que falta).
    O funcionário confirma de duas formas:
    - tocando no botão, **ou**
    - mostrando o **polegar para cima ao lado do próprio rosto** por ~0,4 s.
@@ -227,17 +233,56 @@ A foto só serve se alguém olhar. A planilha ganha um menu **Ponto Saída**:
 Assim o erro deixa de ser invisível: em vez de auditar tudo, olha-se a foto das
 poucas linhas laranja.
 
+## Entrada e saída para funcionários específicos
+
+O padrão do app continua sendo **só a saída**. Para liberar a entrada para
+alguém, marque no cadastro (**Admin → + Cadastrar funcionário**) a caixa
+**"Registra entrada e saída neste aparelho"**. Na lista de funcionários eles
+aparecem com a etiqueta `entrada+saída`, e o título da tela passa de
+*Registro de Saída* para *Registro de Ponto* assim que existir alguém marcado.
+
+Para essas pessoas o app decide sozinho qual marcação falta:
+
+| Situação | Próxima marcação |
+|---|---|
+| Sem jornada aberta | **Entrada** |
+| Entrada em aberto, dentro da jornada | **Saída** |
+| Entrada em aberto há mais que a jornada máxima | **Entrada** (a saída foi esquecida) |
+
+A decisão **não é por dia civil** — é pela jornada aberta. Quem entra às 23:00
+sai às 04:00 do dia seguinte, e uma regra por data ofereceria "entrada" de novo
+de madrugada. Duas configurações governam isso, em **Admin → Configurações**:
+
+- **Duração máxima da jornada (horas)** — padrão **16**. É o prazo em que uma
+  entrada em aberto ainda pode ser fechada por uma saída. Passado o prazo, o app
+  entende que a saída foi esquecida e volta a oferecer entrada, em vez de deixar
+  a pessoa presa em "saída" para sempre. A jornada não encerrada continua
+  aparecendo na planilha — que é o registro honesto do que aconteceu.
+- **Intervalo mínimo entre a entrada e a saída (minutos)** — padrão **5**. A
+  tela de sucesso some em ~3 s e a pessoa ainda está enquadrada; sem esse prazo
+  o 👍 seguinte fecharia a jornada recém-aberta.
+
+> ⚠️ **A planilha precisa do Apps Script novo.** A coluna `Tipo` era literal
+> `'Saída'`; agora segue o tipo do registro. Sem reimplantar o
+> `apps-script.gs`, as entradas chegam rotuladas como saída.
+> Registros antigos, que não trazem o campo, continuam sendo lidos como saída.
+
 ## Trava de 12 horas
 
 Um funcionário **não consegue registrar uma nova saída antes de 12h** da última.
 Enquanto estiver travado, o app mostra o nome e
 `Saída já registrada às HH:MM · libera em 11h56` — o botão de confirmar nem aparece.
 
+Para quem registra **entrada e saída**, a mesma trava passa a separar uma
+jornada da seguinte: conta a partir da **última saída** e segura a **próxima
+entrada**. Entre a entrada e a sua saída vale o intervalo curto (5 min).
+
 A regra é verificada em **dois pontos**: ao reconhecer o rosto (não abre a
 confirmação) e de novo **imediatamente antes de gravar** — ou seja, ela não
 depende da tela para valer.
 
-Ajustável em **Admin → Configurações → Intervalo mínimo entre saídas (horas)**.
+Ajustável em **Admin → Configurações → Intervalo mínimo entre saídas do mesmo
+funcionário (horas)**.
 Padrão **12**, aceita 0–24. **`0` desliga a trava** (útil só para testes).
 
 > Para descartar registros de teste que estejam segurando a trava, use
@@ -279,3 +324,7 @@ face-api e os assets do MediaPipe (~17 MB no total).
 Armazenamento local próprio, **independente do app original**:
 IndexedDB `PontoSaida` (o original usa `PontoDigital`). Os funcionários precisam
 ser cadastrados de novo aqui — os dois apps não compartilham cadastro.
+
+Vale para a marca de entrada+saída também: ela é **deste aparelho**. Se a pessoa
+bate a entrada no app da raiz e a saída aqui, não marque a caixa — os dois apps
+não se enxergam, e a entrada acabaria registrada em duas planilhas.

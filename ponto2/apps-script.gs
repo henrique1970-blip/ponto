@@ -70,7 +70,10 @@ function doPost(e) {
       linhas.push([
         r.id,
         r.userName,
-        'Saída',
+        // O app nasceu só de saída. Quem está marcado como "entrada e saída"
+        // no cadastro manda type='entry'. Registro antigo não traz o campo —
+        // e era saída, então o padrão do ternário mantém o histórico correto.
+        r.type === 'entry' ? 'Entrada' : 'Saída',
         Utilities.formatDate(dt, TZ, 'dd/MM/yyyy'),
         Utilities.formatDate(dt, TZ, 'HH:mm:ss'),
         r.locationName,

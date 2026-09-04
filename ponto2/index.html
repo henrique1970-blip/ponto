@@ -134,11 +134,14 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .uphotos{font-size:.75rem;color:var(--text2)}
 .tag-vis{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   background:#FEF3C7;color:#92400E;border-radius:5px;padding:1px 5px;vertical-align:middle}
+.tag-duplo{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  background:#DCFCE7;color:#166534;border-radius:5px;padding:1px 5px;vertical-align:middle}
 .empty-msg{font-size:.85rem;color:var(--text2);text-align:center;padding:12px 0}
 
 /* ---- PUNCH LOG ---- */
 .plog{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
 .plog-item{font-size:.78rem;padding:8px 10px;background:#F8FAFC;border-radius:7px;border-left:3px solid var(--orange)}
+.plog-item.entry{border-left-color:var(--green)}
 .plog-name{font-weight:700}
 .plog-time{color:var(--text2)}
 
@@ -191,7 +194,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 <!-- ========== VIEW: PUNCH (SAÍDA) ========== -->
 <div class="view active" id="vPunch">
   <div class="hdr">
-    <h1>🔴 Registro de Saída</h1>
+    <h1 id="appTitle">🔴 Registro de Saída</h1>
     <button class="hdr-btn" onclick="goAdmin()">Admin</button>
   </div>
   <div class="sbar">
@@ -269,7 +272,26 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         <input id="cfgMinH" type="number" min="0" max="24" step="1" placeholder="12">
       </div>
       <p class="hint">Impede que a mesma pessoa registre outra saída antes desse prazo.
-        Padrão: <b>12h</b>. Use <b>0</b> para desligar a trava (não recomendado).</p>
+        Para quem registra <b>entrada e saída</b>, é o intervalo entre uma jornada e a
+        seguinte (conta a partir da última saída). Padrão: <b>12h</b>.
+        Use <b>0</b> para desligar a trava (não recomendado).</p>
+
+      <div class="field">
+        <label>Duração máxima da jornada (horas)</label>
+        <input id="cfgJornada" type="number" min="1" max="24" step="1" placeholder="16">
+      </div>
+      <p class="hint">Só vale para quem registra <b>entrada e saída</b>. Depois de uma
+        entrada, o app oferece a saída até esse prazo — é o que faz o turno da noite
+        (entra 23:00, sai 04:00) fechar no dia seguinte. Passado o prazo, entende que a
+        saída foi esquecida e volta a oferecer entrada. Padrão: <b>16h</b>.</p>
+
+      <div class="field">
+        <label>Intervalo mínimo entre a entrada e a saída (minutos)</label>
+        <input id="cfgMinEntre" type="number" min="0" max="240" step="1" placeholder="5">
+      </div>
+      <p class="hint">A tela de sucesso some em 3 segundos e a pessoa ainda está na frente
+        da câmera — sem esse prazo, o 👍 seguinte fecharia a jornada recém-aberta.
+        Padrão: <b>5 min</b>.</p>
       <div class="field">
         <label>Rigor do reconhecimento facial</label>
         <select id="cfgRigor">
@@ -324,12 +346,12 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 
     <!-- Pending punches -->
     <div class="card">
-      <div class="card-title">📤 Saídas pendentes de envio</div>
+      <div class="card-title">📤 Registros pendentes de envio</div>
       <div class="plog" id="plogList"><p class="empty-msg">Nenhum registro pendente.</p></div>
       <button class="btn btn-blue btn-full" onclick="syncNow(false)">Sincronizar com Google Sheets</button>
       <button class="btn btn-gray btn-full" onclick="wipePunches()">🧪 Apagar registros locais (teste)</button>
-      <p class="hint" style="margin-top:8px">Apaga o histórico de saídas <b>deste aparelho</b>, inclusive os
-        pendentes ainda não enviados, e libera a trava de 12h. O que já foi para a planilha permanece lá.</p>
+      <p class="hint" style="margin-top:8px">Apaga o histórico <b>deste aparelho</b>, inclusive os
+        pendentes ainda não enviados, e libera as travas. O que já foi para a planilha permanece lá.</p>
     </div>
 
     <!-- Instructions -->
@@ -367,6 +389,13 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
     </div>
     <p class="hint">Marque para pessoas que passam na frente do totem mas não são do quadro.
       Cadastrá-las evita que o app as confunda com um funcionário parecido.</p>
+    <div class="field-chk">
+      <input id="regDuplo" type="checkbox">
+      <label for="regDuplo">Registra <b>entrada e saída</b> neste aparelho</label>
+    </div>
+    <p class="hint">Sem marcar, a pessoa segue registrando <b>só a saída</b> — o comportamento
+      padrão deste app. Marcado, o app alterna: a primeira marcação da jornada é a entrada,
+      a seguinte é a saída.</p>
     <video id="regVideo" class="reg-video" autoplay muted playsinline></video>
     <div class="thumbs" id="thumbs"></div>
     <div class="reg-status" id="regStatus">Tire 3 fotos para melhor precisão (mínimo 1).</div>
@@ -442,6 +471,8 @@ const WEBHOOK_PADRAO = 'https://script.google.com/macros/s/AKfycbyletoQ95lj2dy-R
 const CONFIRM_TIMEOUT = 20000;  // janela para confirmar antes de voltar a escanear
 const DONE_DURATION   =  3200;  // tempo da tela de sucesso
 const DEFAULT_MIN_H   =    12;  // intervalo mínimo entre saídas do mesmo funcionário (horas)
+const DEFAULT_JORNADA_H =  16;  // prazo em que uma entrada em aberto ainda vira saída
+const DEFAULT_MIN_ENTRE =   5;  // intervalo mínimo entre a entrada e a sua saída (minutos)
 const THUMB_SCORE     =  0.62;  // confiança mínima do gesto
 const THUMB_FRAMES    =     4;  // leituras consecutivas exigidas (anti-falso-positivo)
 const GESTURE_INTERVAL=   100;  // ms entre inferências de gesto (~10 fps)
@@ -592,6 +623,8 @@ let confirmUntil = 0;
 let wakeLock     = null;
 let wakeWanted   = true;
 let minHours     = DEFAULT_MIN_H;
+let jornadaH     = DEFAULT_JORNADA_H;
+let minEntre     = DEFAULT_MIN_ENTRE;
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 async function init() {
@@ -599,6 +632,8 @@ async function init() {
   wakeWanted = await getCfg('wake', true);
   gestureOn  = await getCfg('gesture', true);
   minHours   = await getCfg('minhours', DEFAULT_MIN_H);
+  jornadaH   = await getCfg('jornadah', DEFAULT_JORNADA_H);
+  minEntre   = await getCfg('minentre', DEFAULT_MIN_ENTRE);
   setRigor(await getCfg('rigor', DEFAULT_RIGOR));
   fotoOn     = await getCfg('foto', true);
   adaptOn    = await getCfg('adapt', true);
@@ -1007,17 +1042,19 @@ async function detect() {
     return;
   }
 
-  const block = await exitBlock(p1.name);
-  if (block) {
-    // Já registrou saída há menos de `minHours` — não propõe uma nova.
+  const plano = await planoDoRegistro(p1.user);
+  if (plano.block) {
+    // A marcação que falta ainda está travada — não propõe nada.
     badge.textContent   = p1.name;
     badge.style.display = 'block';
-    setIdleBtn(blockMsg(block));
+    setIdleBtn(blockMsg(plano.block));
     return;
   }
 
   enterConfirm({
     name  : p1.name,
+    type  : plano.type,
+    duplo : !!p1.user.duplo,
     dist  : p1.dist,
     margem: p2 ? p2.dist - p1.dist : null,
     thumb : p1.user.thumb || '',
@@ -1026,20 +1063,50 @@ async function detect() {
   });
 }
 
-// ─── TRAVA DE 12H ────────────────────────────────────────────────────────────
-// Um funcionário só pode registrar uma nova saída depois de `minHours` da última.
-// Retorna null se estiver liberado, ou {last, freeAt} se ainda estiver bloqueado.
-async function exitBlock(name) {
-  if (!minHours) return null;                       // 0 = trava desligada
+// ─── O QUE ESTA PESSOA REGISTRA AGORA ───────────────────────────────────────
+// Por padrão este app é de SAÍDA — e continua sendo para todo mundo. Quem está
+// marcado com `duplo` no cadastro registra entrada e saída, alternando.
+//
+// Devolve { type:'entry'|'exit', block:null|{last,freeAt} }. `block` preenchido
+// significa: é essa a marcação que falta, mas ainda não está liberada.
+async function planoDoRegistro(user) {
   const all  = await dbAll('punches');
   const mine = all
-    .filter(p => p.userName === name)
+    .filter(p => p.userName === user.name)
     .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-  const last = mine[mine.length - 1];
-  if (!last) return null;
+  const last = mine[mine.length - 1] || null;
 
-  const lastAt = new Date(last.timestamp).getTime();
-  const freeAt = lastAt + minHours * 3600e3;
+  // Só-saída: exatamente a trava de sempre — uma saída a cada `minHours`.
+  if (!user.duplo) return { type: 'exit', block: travaHoras(last, minHours) };
+
+  // Entrada em aberto dentro da jornada: o que falta é a saída. A trava aqui é
+  // curta, e existe só para a tela de sucesso não emendar numa segunda leitura
+  // com a pessoa ainda enquadrada.
+  if (last && last.type === 'entry' && horasDesde(last) <= jornadaH) {
+    return { type: 'exit', block: travaMinutos(last, minEntre) };
+  }
+
+  // Nada em aberto — ou entrada tão velha que a saída foi esquecida (não trava
+  // ninguém por isso: a jornada anterior fica aberta na planilha, que é o
+  // registro honesto, e a pessoa começa a de hoje). A trava de `minHours`
+  // continua valendo entre a última saída e a entrada seguinte.
+  return {
+    type : 'entry',
+    block: last && last.type === 'exit' ? travaHoras(last, minHours) : null,
+  };
+}
+
+const horasDesde = p => (Date.now() - new Date(p.timestamp).getTime()) / 3600e3;
+
+function travaHoras(last, horas) {
+  if (!last || !horas) return null;                 // 0 = trava desligada
+  const freeAt = new Date(last.timestamp).getTime() + horas * 3600e3;
+  return Date.now() < freeAt ? { last, freeAt } : null;
+}
+
+function travaMinutos(last, minutos) {
+  if (!last || !minutos) return null;
+  const freeAt = new Date(last.timestamp).getTime() + minutos * 60e3;
   return Date.now() < freeAt ? { last, freeAt } : null;
 }
 
@@ -1055,7 +1122,9 @@ function blockMsg(block) {
   const min = Math.ceil((faltam % 3600e3) / 60e3);
   const restante = h > 0 ? `${h}h${String(min).padStart(2,'0')}` : `${min}min`;
 
-  return `Saída já registrada ${quando} · libera em ${restante}`;
+  // A mensagem fala da marcação ANTERIOR — é ela que está segurando.
+  const tipo = block.last.type === 'entry' ? 'Entrada' : 'Saída';
+  return `${tipo} já registrada ${quando} · libera em ${restante}`;
 }
 
 // ─── CONFIRMAÇÃO ────────────────────────────────────────────────────────────
@@ -1091,6 +1160,8 @@ function enterConfirm(match) {
   document.getElementById('overlay').getContext('2d').clearRect(0,0,overlay.width,overlay.height);
 
   document.getElementById('coName').textContent = match.name;
+  document.querySelector('#confirmOv .co-hi').textContent =
+    match.type === 'entry' ? 'Confirmar entrada' : 'Confirmar saída';
 
   const canGesture = gestureOn && gestureRec;
   document.getElementById('coHint').innerHTML = canGesture
@@ -1102,7 +1173,7 @@ function enterConfirm(match) {
   const btn = document.getElementById('btnPunch');
   btn.disabled  = false;
   btn.className = 'btn-punch ready';
-  btn.textContent = '✔ CONFIRMAR SAÍDA';
+  btn.textContent = '✔ CONFIRMAR ' + rotulo(match.type).toUpperCase();
   document.getElementById('btnCancel').classList.add('on');
 }
 
@@ -1120,7 +1191,8 @@ function tickConfirm() {
   if (!liveOk && !liveEscape && liveLeituras && liveFirstTs &&
       Date.now() - liveFirstTs > LIVE_ESCAPE) {
     liveEscape = true;
-    document.getElementById('btnPunch').textContent = '✔ CONFIRMAR SAÍDA (sem prova de vida)';
+    document.getElementById('btnPunch').textContent =
+      '✔ CONFIRMAR ' + rotulo(curMatch && curMatch.type).toUpperCase() + ' (sem prova de vida)';
   }
 
   if (!liveOk) return;              // sem prova de vida, nem o gesto vale
@@ -1386,11 +1458,14 @@ async function confirmPunch(method) {
   btn.className   = 'btn-punch';
   btn.textContent = 'Registrando…';
 
-  // Revalida a trava aqui também: a regra não pode depender da tela.
-  // Cobre a janela de 20s da confirmação e qualquer caminho que chegue até aqui.
-  const block = await exitBlock(match.name);
-  if (block) {
-    toast(blockMsg(block), 4500);
+  // Revalida aqui também: a regra não pode depender da tela. Cobre a janela de
+  // 20s da confirmação e qualquer caminho que chegue até aqui. O TIPO gravado
+  // sai desta revalidação, não do que a tela mostrou — se a janela de jornada
+  // virou no meio da confirmação, vale a regra, e a tela de sucesso dirá a
+  // verdade porque também lê daqui.
+  const plano = await planoDoRegistro({ name: match.name, duplo: match.duplo });
+  if (plano.block) {
+    toast(blockMsg(plano.block), 4500);
     curMatch = null;
     mode     = 'scanning';
     resetStreak();
@@ -1412,7 +1487,7 @@ async function confirmPunch(method) {
   const now = new Date();
   const rec = {
     userName     : match.name,
-    type         : 'exit',
+    type         : plano.type,
     method,                            // 'gesto' | 'botao'
     timestamp    : now.toISOString(),
     locationName : locNm,
@@ -1432,7 +1507,7 @@ async function confirmPunch(method) {
   document.getElementById('doneName').textContent = match.name;
   document.getElementById('doneTime').textContent = now.toLocaleTimeString('pt-BR');
   document.getElementById('doneSub').textContent  =
-    'Saída registrada · confirmado por ' + (method==='gesto' ? 'gesto 👍' : 'botão');
+    rotulo(plano.type) + ' registrada · confirmado por ' + (method==='gesto' ? 'gesto 👍' : 'botão');
   document.getElementById('doneOv').classList.add('on');
 
   if (navigator.vibrate) navigator.vibrate([40,60,40]);
@@ -1527,6 +1602,8 @@ async function goAdmin() {
   document.getElementById('cfgUrl').value     = await getCfg('webhook', WEBHOOK_PADRAO);
   document.getElementById('cfgPin').value     = '';
   document.getElementById('cfgMinH').value    = minHours;
+  document.getElementById('cfgJornada').value = jornadaH;
+  document.getElementById('cfgMinEntre').value= minEntre;
   document.getElementById('cfgRigor').value   = rigorNome;
   document.getElementById('cfgPhoto').checked = fotoOn;
   document.getElementById('cfgLive').checked  = liveOn;
@@ -1561,6 +1638,18 @@ async function saveSettings() {
     toast('Intervalo mínimo deve ser um número entre 0 e 24 horas.'); return;
   }
 
+  const rawJ = document.getElementById('cfgJornada').value.trim();
+  const jor  = rawJ === '' ? DEFAULT_JORNADA_H : Number(rawJ);
+  if (!Number.isFinite(jor) || jor < 1 || jor > 24) {
+    toast('Duração da jornada deve ser um número entre 1 e 24 horas.'); return;
+  }
+
+  const rawE = document.getElementById('cfgMinEntre').value.trim();
+  const ent  = rawE === '' ? DEFAULT_MIN_ENTRE : Number(rawE);
+  if (!Number.isFinite(ent) || ent < 0 || ent > 240) {
+    toast('Intervalo entre entrada e saída deve ser entre 0 e 240 minutos.'); return;
+  }
+
   const wake = document.getElementById('cfgWake').checked;
   const gest = document.getElementById('cfgGesture').checked;
   const rig  = document.getElementById('cfgRigor').value;
@@ -1572,6 +1661,8 @@ async function saveSettings() {
   await setCfg('webhook', url);
   if (pin.length >= 4) await setCfg('pin', pin);
   await setCfg('minhours', hrs);
+  await setCfg('jornadah', jor);
+  await setCfg('minentre', ent);
   await setCfg('rigor', rig);
   await setCfg('foto', fot);
   await setCfg('live', liv);
@@ -1584,6 +1675,8 @@ async function saveSettings() {
   liveOn     = liv;
   adaptOn    = adp;
   minHours   = hrs;
+  jornadaH   = jor;
+  minEntre   = ent;
   wakeWanted = wake;
   if (wake) acquireWakeLock(); else releaseWakeLock();
 
@@ -1603,7 +1696,8 @@ function renderUserList() {
     <div class="user-item">
       <img class="uavatar" src="${u.thumb||''}" onerror="this.style.visibility='hidden'">
       <div class="uinfo">
-        <div class="uname">${esc(u.name)}${u.blocked?' <span class="tag-vis">visitante</span>':''}</div>
+        <div class="uname">${esc(u.name)}${u.blocked?' <span class="tag-vis">visitante</span>':''}${
+          !u.blocked && u.duplo ? ' <span class="tag-duplo">entrada+saída</span>' : ''}</div>
         <div class="uphotos">${u.descs.length} foto(s)${auto?` · ${auto} aprendida(s)`:''}</div>
       </div>
       <button class="btn btn-orange btn-sm" onclick="delUser(${u.id})">Remover</button>
@@ -1632,15 +1726,15 @@ async function renderPlog() {
   const pend = all.filter(p=>!p.synced).reverse();
   if (!pend.length) { el.innerHTML='<p class="empty-msg">Nenhum registro pendente.</p>'; return; }
   el.innerHTML = pend.map(p=>`
-    <div class="plog-item">
-      <span class="plog-name">${esc(p.userName)}</span> — Saída
+    <div class="plog-item ${p.type==='entry'?'entry':''}">
+      <span class="plog-name">${esc(p.userName)}</span> — ${p.type==='entry'?'Entrada':'Saída'}
       <span class="plog-time"> · ${new Date(p.timestamp).toLocaleString('pt-BR')}</span>
       <br><small>${esc(p.locationName)} · ${p.method==='gesto'?'gesto 👍':'botão'}</small>
     </div>`).join('');
 }
 
-// Limpa o histórico local de saídas — útil para descartar registros de teste,
-// que de outro modo manteriam o funcionário travado pelas próximas 12h.
+// Limpa o histórico local — útil para descartar registros de teste, que de
+// outro modo manteriam o funcionário travado pelas próximas 12h.
 async function wipePunches() {
   const all  = await dbAll('punches');
   if (!all.length) { toast('Não há registros locais.'); return; }
@@ -1649,7 +1743,7 @@ async function wipePunches() {
   const aviso = pend
     ? `\n\n⚠ ATENÇÃO: ${pend} registro(s) ainda NÃO foram enviados à planilha e serão perdidos.`
     : '';
-  if (!confirm(`Apagar os ${all.length} registro(s) de saída deste aparelho?${aviso}`)) return;
+  if (!confirm(`Apagar os ${all.length} registro(s) deste aparelho?${aviso}`)) return;
 
   for (const p of all) await dbDel('punches', p.id);
   toast(`${all.length} registro(s) apagados. Trava liberada.`);
@@ -1671,6 +1765,16 @@ function setRigor(nome) {
 }
 
 // ─── LOAD USERS ──────────────────────────────────────────────────────────────
+// "Registro de Saída" no alto da tela vira mentira assim que alguém do quadro
+// passa a bater entrada — então o título segue o cadastro.
+function updTitulo() {
+  const el = document.getElementById('appTitle');
+  if (!el) return;
+  const temDuplo = users.some(u => u.duplo && !u.blocked);
+  el.textContent = temDuplo ? '⏱ Registro de Ponto' : '🔴 Registro de Saída';
+  document.title = temDuplo ? 'Ponto' : 'Ponto Saída';
+}
+
 async function loadUsers() {
   users = await dbAll('users');
   // Descritores em Float32Array uma vez só — a comparação roda a cada 350ms.
@@ -1679,6 +1783,7 @@ async function loadUsers() {
     u.autoF = (u.auto  || []).map(d => Float32Array.from(d));
   }
   users = users.filter(u => u.descF.length);
+  updTitulo();
   resetStreak();
 }
 
@@ -1688,6 +1793,7 @@ async function openReg() {
   regThumbs = [];
   document.getElementById('regName').value    = '';
   document.getElementById('regBlocked').checked = false;
+  document.getElementById('regDuplo').checked   = false;
   document.getElementById('thumbs').innerHTML = '';
   document.getElementById('regStatus').textContent = 'Tire 3 fotos para melhor precisão (mínimo 1).';
   document.getElementById('btnSave').disabled = true;
@@ -1767,6 +1873,7 @@ async function saveUser() {
   if (!regDescs.length) { toast('Capture ao menos 1 foto.'); return; }
 
   const blocked = document.getElementById('regBlocked').checked;
+  const duplo   = document.getElementById('regDuplo').checked;
 
   // Dois cadastros parecidos demais deixam o sistema permanentemente ambíguo:
   // o teste de margem passaria a recusar os dois. Melhor barrar na entrada.
@@ -1795,10 +1902,21 @@ async function saveUser() {
 
   const existing = users.find(u=>u.name.toLowerCase()===name.toLowerCase());
   if (existing) {
-    if (!confirm(`"${name}" já está cadastrado. Substituir as fotos?`)) return;
+    // O modal abre sempre com as caixas limpas. Recadastrar as fotos de quem já
+    // registra entrada e saída apagaria a marca em silêncio — e a pessoa
+    // voltaria a bater só a saída sem ninguém perceber. Então avisa.
+    let msg = `"${name}" já está cadastrado. Substituir as fotos?`;
+    if (existing.duplo && !duplo) {
+      msg += '\n\n⚠ A caixa "registra entrada e saída" está DESMARCADA: ' +
+             'ele passará a registrar SÓ A SAÍDA.';
+    } else if (!existing.duplo && duplo) {
+      msg += '\n\n➕ Ele passará a registrar ENTRADA E SAÍDA.';
+    }
+    if (!confirm(msg)) return;
     existing.descs   = regDescs;
     existing.thumb   = regThumbs[0];
     existing.blocked = blocked;
+    existing.duplo   = duplo;
     delete existing.auto;               // fotos aprendidas eram do cadastro antigo
     delete existing.descF; delete existing.autoF;   // caches derivados
     await dbPut('users', existing);
@@ -1808,17 +1926,21 @@ async function saveUser() {
       descs: regDescs,
       thumb: regThumbs[0],
       blocked,
+      duplo,
       at   : new Date().toISOString(),
     });
   }
 
-  toast(`"${name}" cadastrado como ${blocked?'visitante':'funcionário'}! ✓`);
+  toast(`"${name}" cadastrado como ${
+    blocked ? 'visitante' : duplo ? 'funcionário (entrada e saída)' : 'funcionário (só saída)'}! ✓`);
   closeReg();
   await loadUsers();
   renderUserList();
 }
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
+const rotulo = type => (type === 'entry' ? 'Entrada' : 'Saída');
+
 let _toastT;
 function toast(msg, dur=3200) {
   const el = document.getElementById('toast');
