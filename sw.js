@@ -15,7 +15,9 @@
 // v6: o `index.html` do v5 foi ao ar com a política de localização errada
 // (§11.1 do handoff). O bump garante que o `activate` descarte aquele arquivo
 // em vez de deixá-lo servível a partir do cache.
-const CACHE_APP = 'ponto-app-v6';
+// v7: o Apps Script embutido ganhou a seção de jornadas e cálculo de horas.
+//     Sem o bump, a tela de Admin continuaria mostrando o código antigo.
+const CACHE_APP = 'ponto-app-v7';
 const CACHE_LIB = 'ponto-lib-v1';
 const MANTER    = [CACHE_APP, CACHE_LIB];
 
