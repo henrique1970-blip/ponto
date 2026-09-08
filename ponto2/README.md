@@ -344,6 +344,27 @@ Usa **MediaPipe Tasks Vision** (`GestureRecognizer`, gesto pré-treinado `Thumb_
 funcionando normalmente com o botão, e a dica na tela muda para "Confirme no botão
 verde abaixo". Pode ser desligado em **Admin → Configurações**.
 
+## Instalar no aparelho
+
+O botão **⬇ Instalar** aparece no cabeçalho enquanto o app estiver rodando na
+aba do navegador, e some sozinho depois de instalado. O mesmo comando está em
+**Admin → 📱 Instalar no aparelho**, junto com o estado atual.
+
+No Android o navegador entrega um diálogo pronto (`beforeinstallprompt`), que o
+app guarda para disparar no clique — abrir o diálogo fora de um clique do
+usuário é bloqueado. No iPhone esse evento não existe: o atalho é criado pelo
+menu **Compartilhar** do Safari, e o botão mostra o passo a passo.
+
+### Remover
+
+**Nenhuma página consegue se desinstalar.** Não existe API para isso — o botão
+*"Como remover o app"* só ensina o caminho do sistema (segurar o ícone →
+Desinstalar, ou Remover App no iOS).
+
+> ⚠️ **Sincronize antes de remover.** O cadastro e os registros ainda não
+> enviados moram no IndexedDB **deste aparelho**; desinstalar apaga os dois. O
+> que já subiu para a planilha permanece lá.
+
 ## Offline
 
 O Service Worker (`CACHE` no topo de `sw.js` — suba a versão a cada mudança em

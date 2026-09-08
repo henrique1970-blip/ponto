@@ -35,6 +35,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .hdr h1{font-size:1rem;font-weight:700;flex:1;letter-spacing:.3px}
 .hdr-btn{background:rgba(0,0,0,.10);border:none;color:var(--text);padding:6px 13px;border-radius:20px;font-size:.8rem;font-weight:600;cursor:pointer}
 .hdr-btn:active{background:rgba(0,0,0,.2)}
+.hdr-btn.install{background:#FBBF24;color:#3F2D00;display:none}
+.hdr-btn.install.on{display:inline-block}
 
 /* ---- STATUS BAR ---- */
 .sbar{background:#FFF7ED;border-bottom:1px solid #FED7AA;padding:5px 14px;font-size:.75rem;color:#C2410C;display:flex;align-items:center;gap:7px;flex-shrink:0}
@@ -108,6 +110,11 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .scroll{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
 .card{background:var(--card);border-radius:13px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
 .card-title{font-size:.9rem;font-weight:700;color:var(--orange-ink);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.off-state{font-size:.82rem;padding:9px 11px;border-radius:9px;background:#F8FAFC;margin-bottom:10px;line-height:1.55}
+.off-state.ok{background:#ECFDF5;color:#065F46}
+.off-state.warn{background:#FFFBEB;color:#92400E}
+.ios-steps{font-size:.85rem;line-height:1.9;color:var(--text);padding-left:18px}
+.ios-steps li{margin-bottom:6px}
 .field{margin-bottom:11px}
 .field label{display:block;font-size:.78rem;color:var(--text2);margin-bottom:4px;font-weight:500}
 .field input,.field select{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:.95rem;font-family:inherit;color:var(--text);background:#fff;transition:border-color .2s}
@@ -195,6 +202,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 <div class="view active" id="vPunch">
   <div class="hdr">
     <h1 id="appTitle">⏱ Registro de Ponto</h1>
+    <button class="hdr-btn install" id="btnInstall" onclick="doInstall()">⬇ Instalar</button>
     <button class="hdr-btn" onclick="goAdmin()">Admin</button>
   </div>
   <div class="sbar">
@@ -342,6 +350,21 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       <button class="btn btn-orange btn-full" onclick="saveSettings()">Salvar configurações</button>
     </div>
 
+    <!-- Instalação -->
+    <div class="card">
+      <div class="card-title">📱 Instalar no aparelho</div>
+      <div class="off-state" id="instState">Verificando…</div>
+      <p style="font-size:.78rem;color:#555;line-height:1.6">
+        Cria o atalho do <b>Ponto</b> na tela inicial, com ícone próprio e sem a barra do
+        navegador. O cadastro e os registros ficam neste aparelho de qualquer forma —
+        instalar muda só a maneira de abrir.
+      </p>
+      <button class="btn btn-green btn-full" onclick="doInstall()">📲 Criar atalho na tela inicial</button>
+      <button class="btn btn-gray btn-full" onclick="showRemoveHelp()">🗑 Como remover o app</button>
+      <p class="hint" style="margin-top:8px">Remover é feito pelo próprio sistema: nenhum site
+        consegue desinstalar a si mesmo. O botão acima mostra o passo a passo do aparelho.</p>
+    </div>
+
     <!-- Employees -->
     <div class="card">
       <div class="card-title">👥 Funcionários cadastrados</div>
@@ -407,6 +430,18 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       <button class="btn btn-green" id="btnCapture" onclick="capture()">📸 Capturar</button>
       <button class="btn btn-blue" id="btnSave" onclick="saveUser()" disabled>✓ Salvar</button>
       <button class="btn btn-gray" onclick="closeReg()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== MODAL: instalar / remover ========== -->
+<div class="modal-bg" id="modalInstall">
+  <div class="modal">
+    <div class="modal-title" id="instTitle">📲 Criar atalho na tela inicial</div>
+    <div id="instHow"></div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-gray btn-full"
+              onclick="document.getElementById('modalInstall').classList.remove('on')">Fechar</button>
     </div>
   </div>
 </div>
@@ -662,6 +697,7 @@ async function init() {
   }
 
   document.getElementById('loading').style.display = 'none';
+  updInstallUI();
   await loadUsers();
   startClock();
   watchNetwork();
@@ -1634,6 +1670,7 @@ async function goAdmin() {
   document.getElementById('cfgGesture').checked = gestureOn;
   renderUserList();
   renderPlog();
+  updInstallUI();
 
   document.getElementById('vPunch').classList.remove('active');
   document.getElementById('vAdmin').classList.add('active');
@@ -1972,6 +2009,113 @@ function copyScript() {
   navigator.clipboard.writeText(APPS_SCRIPT)
     .then(()=>toast('Código copiado para a área de transferência! ✓'))
     .catch(()=>toast('Selecione e copie o código manualmente.'));
+}
+
+// ─── INSTALAÇÃO / ATALHO NA TELA INICIAL ────────────────────────────────────
+// O navegador só deixa abrir o diálogo de instalação dentro de um clique do
+// usuário — por isso o evento é guardado em vez de usado na hora em que chega.
+//
+// DESINSTALAR não tem API: nenhuma página consegue se remover do aparelho. O
+// que dá para fazer é ensinar o caminho do sistema, que é o que showRemoveHelp
+// faz — e avisar do que se perde junto.
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+let deferredPrompt = null;
+
+function isStandalone() {
+  return matchMedia('(display-mode: standalone)').matches ||
+         matchMedia('(display-mode: fullscreen)').matches ||
+         navigator.standalone === true;
+}
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  updInstallUI();
+});
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  updInstallUI();
+  toast('App instalado — o atalho já está na tela inicial ✓', 4500);
+});
+
+function updInstallUI() {
+  const btn = document.getElementById('btnInstall');
+  const st  = document.getElementById('instState');
+  if (btn) btn.classList.toggle('on', !isStandalone());
+  if (!st) return;
+  if (isStandalone()) {
+    st.className   = 'off-state ok';
+    st.textContent = '✅ App instalado — o atalho já está na tela inicial.';
+  } else if (deferredPrompt) {
+    st.className   = 'off-state warn';
+    st.textContent = '⚠ Ainda não instalado. Toque no botão abaixo para criar o atalho.';
+  } else if (IS_IOS) {
+    st.className   = 'off-state warn';
+    st.textContent = '⚠ No iPhone o atalho é criado pelo menu Compartilhar do Safari. \
+Toque abaixo para ver o passo a passo.';
+  } else {
+    st.className   = 'off-state warn';
+    st.textContent = '⚠ Ainda não instalado. Toque abaixo para ver o passo a passo.';
+  }
+}
+
+async function doInstall() {
+  if (isStandalone()) { toast('O app já está instalado neste aparelho.'); return; }
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    updInstallUI();
+    toast(outcome === 'accepted'
+      ? 'Instalando… o atalho aparecerá na tela inicial.'
+      : 'Instalação cancelada.');
+    return;
+  }
+  showInstallHelp();
+}
+
+function abreAjuda(titulo, html) {
+  document.getElementById('instTitle').textContent = titulo;
+  document.getElementById('instHow').innerHTML     = html;
+  document.getElementById('modalInstall').classList.add('on');
+}
+
+function showInstallHelp() {
+  abreAjuda('📲 Criar atalho na tela inicial', IS_IOS
+    ? `<ol class="ios-steps">
+         <li>Abra este endereço no <b>Safari</b> (o Chrome do iPhone não cria o atalho).</li>
+         <li>Toque em <b>Compartilhar</b> ⬆️, na barra de baixo.</li>
+         <li>Role e escolha <b>Adicionar à Tela de Início</b>.</li>
+         <li>Confirme em <b>Adicionar</b> — o ícone aparece junto dos outros apps.</li>
+       </ol>`
+    : `<ol class="ios-steps">
+         <li>Toque no menu <b>⋮</b> do navegador (canto superior direito).</li>
+         <li>Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li>
+         <li>Confirme — o atalho aparece junto dos outros apps.</li>
+       </ol>`);
+}
+
+function showRemoveHelp() {
+  const passos = IS_IOS
+    ? `<ol class="ios-steps">
+         <li>Na tela inicial, toque e <b>segure</b> o ícone do <b>Ponto</b>.</li>
+         <li>Escolha <b>Remover App</b>.</li>
+         <li>Confirme em <b>Excluir App</b>.</li>
+       </ol>`
+    : `<ol class="ios-steps">
+         <li>Na tela inicial, toque e <b>segure</b> o ícone do <b>Ponto</b>.</li>
+         <li>Escolha <b>Desinstalar</b> (ou arraste até <b>Desinstalar</b>).</li>
+         <li>Confirme.</li>
+       </ol>`;
+
+  abreAjuda('🗑 Remover o app deste aparelho', passos +
+    `<div class="off-state warn" style="margin-top:12px">
+       ⚠ <b>Sincronize antes de remover.</b> O cadastro dos funcionários e os registros
+       ainda não enviados ficam guardados <b>neste aparelho</b>. Desinstalar apaga esses
+       dados junto. O que já subiu para a planilha permanece lá.
+     </div>`);
 }
 
 // ─── SERVICE WORKER ──────────────────────────────────────────────────────────

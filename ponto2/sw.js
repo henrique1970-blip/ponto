@@ -14,7 +14,8 @@
 // v9: cadastro ganhou "plantão" — várias entradas e saídas por dia.
 // v10: todo mundo passa a registrar entrada e saída; a marca por funcionário
 //      deixou de existir. O app não é mais só de saída.
-const CACHE = 'ponto-saida-v10';
+// v11: botão de instalar no cabeçalho e card de instalação no Admin.
+const CACHE = 'ponto-saida-v11';
 
 // Mesma origem — precisa funcionar para o app abrir offline.
 const CORE = [

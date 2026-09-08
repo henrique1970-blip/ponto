@@ -34,7 +34,7 @@ html = html.replace('</body>', `<script>
     get users(){return users},
     set liveOn(v){liveOn=v}, set gestureOn(v){gestureOn=v},
     enterConfirm, confirmPunch, planoDoRegistro, dbPut, dbAll,
-    loadUsers, renderPlog, renderUserList,
+    loadUsers, renderPlog, renderUserList, showRemoveHelp,
   };
 </script></body>`);
 
@@ -182,7 +182,18 @@ async function esperaBoot(limite = 8000) {
   ok(plano.type === 'exit' && !!plano.block,
      'e a saída dela fica travada pelo intervalo curto');
 
-  console.log('\n【5】 Erros de JavaScript');
+  console.log('\n【5】 Botão de instalar');
+  ok(!!$('btnInstall'), 'o botão existe no cabeçalho');
+  ok($('btnInstall').classList.contains('on'),
+     'fora do modo instalado, o botão aparece', $('btnInstall').className);
+  ok($('instState').textContent.includes('Ainda não instalado'),
+     'o card do Admin diz que não está instalado', $('instState').textContent);
+  w.__t.showRemoveHelp();
+  ok($('modalInstall').classList.contains('on'), 'o passo a passo de remoção abre');
+  ok($('instHow').textContent.includes('Sincronize antes de remover'),
+     'e avisa para sincronizar antes de desinstalar');
+
+  console.log('\n【6】 Erros de JavaScript');
   ok(erros.length === 0, 'nenhum erro no console', erros.join(' | '));
 
   console.log('\n' + (falhas ? `❌ ${falhas} falha(s)` : '✅ todos os testes passaram'));
