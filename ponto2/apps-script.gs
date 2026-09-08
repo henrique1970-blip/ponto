@@ -17,7 +17,10 @@
 // os registros continuam entrando, mas sem foto.
 
 const TZ    = 'America/Sao_Paulo';
-const ABA   = 'Saidas';
+// A aba nasceu "Saidas", de quando o app só registrava saída. Agora ela guarda
+// entrada e saída, e o nome passou a ser "Registros" — igual ao da raiz.
+const ABA         = 'Registros';
+const ABA_ANTIGA  = 'Saidas';
 
 // Selo da versao implantada. Colar o codigo neste editor NAO muda o que a URL
 // /exec executa -- a implantacao aponta para uma versao congelada, e so
@@ -27,7 +30,7 @@ const ABA   = 'Saidas';
 //
 // Abrir a /exec no navegador passa a mostrar este texto. Suba o numero sempre
 // que mexer em algo que a /exec faz.
-const VERSAO = 'v2 - Tipo dinamico (Entrada/Saida)';
+const VERSAO = 'v3 - Aba Registros, painel de botoes, calculo por mes';
 
 // A 'Chave' precisa continuar na coluna 10: linhas antigas já foram gravadas com
 // ela ali, e é por ela que a deduplicação reconhece um reenvio. Colunas novas
@@ -162,11 +165,14 @@ function diagnostico() {
 // rotina: destaca o que passou raspando e mostra quanto falta conferir.
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu('Ponto Saída')
+    .createMenu('Ponto')
+    .addItem('① Preparar planilha (painel de botões)', 'prepararPlanilha')
+    .addSeparator()
+    .addItem('Calcular horas do mês', 'calcularHoras')
+    .addItem('Mover dados do mês', 'moverDados')
+    .addSeparator()
     .addItem('Destacar registros a conferir', 'formatarPlanilha')
     .addItem('Quantos faltam conferir?', 'resumoConferencia')
-    .addSeparator()
-    .addItem('Recalcular jornadas e horas', 'recalcularJornadas')
     .addToUi();
 }
 
@@ -180,19 +186,19 @@ function formatar_(sheet) {
   const faltamLinhas = 1000 - sheet.getMaxRows();
   if (faltamLinhas > 0) sheet.insertRowsAfter(sheet.getMaxRows(), faltamLinhas);
 
-  const faixa  = sheet.getRange(2, 1, sheet.getMaxRows() - 1, COLS.length);
+  const faixa  = sheet.getRange(LIN_DADOS, 1, sheet.getMaxRows() - LIN_CAB, COLS.length);
   const colD   = colLetra_(DIST), colC = colLetra_(CONF), colV = colLetra_(VIVO);
 
   // $ nas colunas para a regra pintar a LINHA inteira, não só a célula testada.
   const suspeito = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied('=AND(OR(AND($' + colD + '2<>"", $' + colD + '2>=' + DIST_REVISAO + '), ' +
-                          '$' + colV + '2="nao confirmada"), NOT($' + colC + '2))')
+    .whenFormulaSatisfied('=AND(OR(AND($' + colD + LIN_DADOS + '<>"", $' + colD + LIN_DADOS + '>=' + DIST_REVISAO + '), ' +
+                          '$' + colV + LIN_DADOS + '="nao confirmada"), NOT($' + colC + LIN_DADOS + '))')
     .setBackground('#FFE8CC')
     .setRanges([faixa])
     .build();
 
   const conferido = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied('=$' + colC + '2=TRUE')
+    .whenFormulaSatisfied('=$' + colC + LIN_DADOS + '=TRUE')
     .setBackground('#E6F4EA')
     .setRanges([faixa])
     .build();
@@ -202,12 +208,14 @@ function formatar_(sheet) {
     .filter(function (r) {
       const b = r.getBooleanCondition();
       const v = b && b.getCriteriaValues()[0];
-      return !(typeof v === 'string' && v.indexOf('$' + colC + '2') >= 0);
+      // Sem a linha na comparação, a regra da versão antiga (que apontava para a
+      // linha 2) também sai — senão ela ficaria pintando o painel.
+      return !(typeof v === 'string' && v.indexOf('$' + colC) >= 0);
     });
   sheet.setConditionalFormatRules(outras.concat([suspeito, conferido]));
 
-  const n = sheet.getLastRow() - 1;
-  if (n > 0) sheet.getRange(2, CONF, n, 1).insertCheckboxes();
+  const n = sheet.getLastRow() - LIN_CAB;
+  if (n > 0) sheet.getRange(LIN_DADOS, CONF, n, 1).insertCheckboxes();
 
   SpreadsheetApp.getActive().toast(
     'Ficam em laranja, até a caixinha "Conferido" ser marcada: Distancia ≥ ' +
@@ -216,10 +224,10 @@ function formatar_(sheet) {
 
 function resumoConferencia() {
   const sheet = getSheet_();
-  const n = sheet.getLastRow() - 1;
+  const n = sheet.getLastRow() - LIN_CAB;
   if (n < 1) { SpreadsheetApp.getActive().toast('Nenhum registro ainda.', 'Ponto Saída', 5); return; }
 
-  const dados = sheet.getRange(2, 1, n, COLS.length).getValues();
+  const dados = sheet.getRange(LIN_DADOS, 1, n, COLS.length).getValues();
   let raspou = 0, semVida = 0, pendentes = 0;
   dados.forEach(function (l) {
     const d = l[DIST - 1];
@@ -294,44 +302,107 @@ function pastaFotos_() {
 // ─── PLANILHA ────────────────────────────────────────────────────────────────
 function getSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(ABA);
+  let sheet = migrarNome_(ss);
+
   if (!sheet) {
     sheet = ss.insertSheet(ABA);
-    sheet.appendRow(COLS);
-    sheet.setFrozenRows(1);
+    sheet.getRange(LIN_CAB, 1, 1, COLS.length).setValues([COLS]);
     sheet.hideColumns(CHAVE);          // a chave é uso interno, não polui a vista
     sheet.setColumnWidth(FOTO, ALTURA_LINHA);
+    montarPainel_(sheet);
     formatar_(sheet);                  // direto, para não reentrar em getSheet_()
-  } else {
-    // Uma planilha antiga pode ter menos colunas do que a grade precisa agora —
-    // sem isso, tanto o cabeçalho quanto o setValues das linhas estourariam.
-    const falta = COLS.length - sheet.getMaxColumns();
-    if (falta > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), falta);
-    ajustarCabecalho_(sheet);
+    return sheet;
   }
+
+  // Uma planilha antiga pode ter menos colunas do que a grade precisa agora —
+  // sem isso, tanto o cabeçalho quanto o setValues das linhas estourariam.
+  const falta = COLS.length - sheet.getMaxColumns();
+  if (falta > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), falta);
+
+  abrirEspacoPainel_(sheet);
+  ajustarCabecalho_(sheet);
   return sheet;
+}
+
+// Renomear a aba à mão não bastava: o código continuava procurando por "Saidas",
+// não achava, e criava uma "Saidas" nova a cada registro — daí a aba repetida
+// com um dado só. A troca de nome tem que acontecer AQUI, no código.
+function migrarNome_(ss) {
+  const nova  = ss.getSheetByName(ABA);
+  const velha = ss.getSheetByName(ABA_ANTIGA);
+  if (!velha) return nova;
+  if (!nova)  { velha.setName(ABA); return velha; }
+
+  // As duas existem: quem renomeou à mão ficou com a história na "Registros" e
+  // os registros novos na "Saidas" recriada. Absorve o que falta pela chave e
+  // aposenta a aba antiga — nada é apagado.
+  abrirEspacoPainel_(nova);
+  const n = velha.getLastRow() - 1;
+  if (n > 0) {
+    // A aba recriada pode ter menos colunas do que a grade de hoje; ler além do
+    // que ela tem estoura, e escrever menos do que COLS.length também.
+    const larg   = Math.min(COLS.length, velha.getMaxColumns());
+    const faixa  = velha.getRange(2, 1, n, larg);
+    const vals   = faixa.getValues();
+    const forms  = faixa.getFormulas();
+    const vistos = chavesExistentes_(nova);
+    const novas  = [];
+    vals.forEach(function (l, i) {
+      const linha = l.map(function (c, j) { return forms[i][j] ? forms[i][j] : c; });
+      while (linha.length < COLS.length) linha.push('');
+      const chave = String(linha[CHAVE - 1] || '');
+      if (!chave || vistos[chave]) return;
+      vistos[chave] = true;
+      novas.push(linha);
+    });
+    if (novas.length) {
+      const ini = nova.getLastRow() + 1;
+      nova.getRange(ini, 1, novas.length, COLS.length).setValues(novas);
+      posMover_(nova, ini, novas.length);
+    }
+  }
+  velha.setName(ABA_ANTIGA + ' (migrada ' + fmt_(new Date(), 'dd-MM-yyyy HH.mm') + ')');
+  return nova;
+}
+
+// O painel é identificado pelo rótulo da A1 — não pelo cabeçalho, que pode estar
+// quebrado. Assim inserir as linhas nunca acontece duas vezes.
+function temPainel_(sheet) {
+  return String(sheet.getRange(1, 1).getValue()) === 'Mês de referência';
+}
+
+// Insere as linhas do painel acima do cabeçalho. O Sheets empurra os dados
+// junto, com fórmulas e formatação — nenhum registro se perde; o que muda é só
+// de que linha em diante ler.
+function abrirEspacoPainel_(sheet) {
+  if (temPainel_(sheet)) return;
+  if (sheet.getLastRow() > 0) sheet.insertRowsBefore(1, PAINEL_LIN);
+  montarPainel_(sheet);
 }
 
 // Planilhas criadas antes desta versão têm 10 colunas. Completa o cabeçalho sem
 // mexer nas linhas já gravadas (a Chave continua na coluna 10, então a
 // deduplicação do histórico segue funcionando).
 function ajustarCabecalho_(sheet) {
-  const atual = sheet.getRange(1, 1, 1, COLS.length).getValues()[0];
+  const atual = sheet.getRange(LIN_CAB, 1, 1, COLS.length).getValues()[0];
   let falta = false;
   for (let i = 0; i < COLS.length; i++) if (atual[i] !== COLS[i]) falta = true;
-  if (!falta) return;
 
-  sheet.getRange(1, 1, 1, COLS.length).setValues([COLS]);
-  sheet.setFrozenRows(1);
-  sheet.hideColumns(CHAVE);
-  sheet.setColumnWidth(FOTO, ALTURA_LINHA);
+  if (falta) {
+    sheet.getRange(LIN_CAB, 1, 1, COLS.length).setValues([COLS])
+         .setFontWeight('bold').setBackground('#F1F5F9');
+    sheet.hideColumns(CHAVE);
+    sheet.setColumnWidth(FOTO, ALTURA_LINHA);
+  }
+  if (!temPainel_(sheet)) montarPainel_(sheet);
+  sheet.setFrozenRows(LIN_CAB);
 }
 
 function chavesExistentes_(sheet) {
-  const n = sheet.getLastRow() - 1;    // desconta o cabeçalho
+  const n = sheet.getLastRow() - LIN_CAB;   // desconta painel e cabeçalho
   const vistos = {};
   if (n < 1) return vistos;
-  sheet.getRange(2, CHAVE, n, 1).getValues().forEach(function (linha) {
+  sheet.getRange(LIN_DADOS, CHAVE, n, 1).getValues().forEach(function (linha) {
     if (linha[0]) vistos[linha[0]] = true;
   });
   return vistos;
@@ -342,11 +413,182 @@ function json_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// ─── PAINEL DE BOTÕES ────────────────────────────────────────────────────────
+// O Apps Script não consegue criar um desenho e amarrar uma função a ele — isso
+// só existe pelo menu do Sheets, à mão, e some se a planilha for copiada. O que
+// ele CONSEGUE criar sozinho é uma caixa de seleção, e marcar uma caixa dispara
+// o gatilho de edição. É o botão que vem junto com o código, sem passo manual.
+//
+// O painel ocupa as PAINEL_LIN primeiras linhas. O cabeçalho desceu para a
+// LIN_CAB e os dados começam na LIN_DADOS: toda leitura da aba passa por essas
+// duas constantes, não há "linha 2" solta em lugar nenhum.
+//
+//      A                      B                     D
+//  1   Mês de referência      [setembro/2026 ▾]     (resposta da última ação)
+//  2   [ ]                    Calcular horas do mês
+//  3   [ ]                    Mover os dados do mês
+//  4   ID   Nome   Tipo   Data   Hora   ...            ← cabeçalho
+//  5   ...                                              ← primeiro registro
+
+const PAINEL_LIN = 3;
+const LIN_CAB    = PAINEL_LIN + 1;
+const LIN_DADOS  = LIN_CAB + 1;
+
+const CEL_MES    = [1, 2];   // B1 — mês de referência (lista suspensa)
+const CEL_STATUS = [1, 4];   // D1 — resposta da última ação
+const CEL_CALC   = [2, 1];   // A2 — caixa "calcular horas"
+const CEL_MOVER  = [3, 1];   // A3 — caixa "mover dados"
+
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+               'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+function cel_(sheet, par) { return sheet.getRange(par[0], par[1]); }
+
+function status_(sheet, txt) {
+  cel_(sheet, CEL_STATUS).setValue(txt);
+  try { SpreadsheetApp.getActive().toast(txt, 'Ponto', 10); } catch (_) { /* sem UI */ }
+}
+
+// Reconstrói o painel. Chamado quando ele não está lá (planilha nova, ou vinda
+// da versão sem painel) e sempre que o menu é usado — a lista de meses precisa
+// enxergar o que chegou depois.
+function montarPainel_(sheet) {
+  const ss = sheet.getParent();
+
+  cel_(sheet, [1, 1]).setValue('Mês de referência').setFontWeight('bold');
+  cel_(sheet, [2, 2]).setValue('◀  Calcular horas do mês');
+  cel_(sheet, [3, 2]).setValue('◀  Mover os dados do mês');
+
+  [CEL_CALC, CEL_MOVER].forEach(function (p) {
+    const c = cel_(sheet, p);
+    if (c.getValue() !== true && c.getValue() !== false) c.insertCheckboxes();
+    c.setValue(false);
+  });
+
+  sheet.getRange(1, 1, PAINEL_LIN, sheet.getMaxColumns()).setBackground('#EEF2FF');
+  sheet.getRange(1, 2, PAINEL_LIN, 1).setFontWeight('bold');
+  cel_(sheet, CEL_STATUS).setFontStyle('italic').setFontColor('#475569');
+  sheet.setFrozenRows(LIN_CAB);
+
+  atualizarMeses_(ss, sheet);
+}
+
+// A lista suspensa só oferece meses que TÊM registro — assim "escolher um mês
+// vazio" quase não acontece, e quando acontece (mês cujos dados já foram
+// movidos e a aba apagada) a mensagem diz quais existem.
+function atualizarMeses_(ss, sheet) {
+  const meses = mesesComDados_(ss);
+  const c = cel_(sheet, CEL_MES);
+  if (!meses.length) { c.clearDataValidations(); return; }
+
+  const rotulos = meses.map(rotuloMes_);
+  c.setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(rotulos, true).setAllowInvalid(false).build());
+
+  if (rotulos.indexOf(String(c.getValue())) < 0) c.setValue(rotulos[0]);
+}
+
+// Meses presentes na aba de registros e em qualquer arquivo já movido.
+function mesesComDados_(ss) {
+  const vistos = {};
+  ss.getSheets().forEach(function (sh) {
+    const nome = sh.getName();
+    const ehArquivo = nome.length > 10 &&
+                      nome.substring(nome.length - 10) === '_registros';
+    if (nome !== ABA && !ehArquivo) return;
+    const cab = (nome === ABA) ? LIN_CAB : 1;
+    const n = sh.getLastRow() - cab;
+    if (n < 1) return;
+    sh.getRange(cab + 1, CHAVE, n, 1).getValues().forEach(function (r) {
+      const ym = mesDaChave_(String(r[0] || ''));
+      if (ym) vistos[ym] = true;
+    });
+  });
+  return Object.keys(vistos).sort().reverse();
+}
+
+function mesDaChave_(chave) {
+  const corte = chave.lastIndexOf('|');
+  if (corte < 0) return null;
+  const d = new Date(chave.substring(corte + 1));
+  return isNaN(d.getTime()) ? null : fmt_(d, 'yyyy-MM');
+}
+
+function rotuloMes_(ym) {
+  const p = ym.split('-');
+  return MESES[+p[1] - 1] + '/' + p[0];
+}
+
+function mesDoRotulo_(rot) {
+  const p = String(rot).split('/');
+  if (p.length !== 2) return null;
+  const i = MESES.indexOf(p[0].trim().toLowerCase());
+  if (i < 0 || !/^[0-9]{4}$/.test(p[1].trim())) return null;
+  return p[1].trim() + '-' + ('0' + (i + 1)).slice(-2);
+}
+
+// Nome da aba do mês. O exemplo pedido é "agosto_calculos" — sem ano, porque no
+// uso normal só existe um agosto em jogo. O ano entra apenas quando o mês NÃO é
+// do ano corrente, para dois agostos não caírem na mesma aba na virada.
+function nomeAba_(ym, sufixo) {
+  const p = ym.split('-');
+  const base = MESES[+p[1] - 1];
+  const nome = (p[0] === fmt_(new Date(), 'yyyy')) ? base : base + '_' + p[0];
+  return nome + '_' + sufixo;
+}
+
+// Lê o mês do painel. Devolve null (já tendo avisado) se não houver escolha.
+function mesEscolhido_(ss, sheet) {
+  atualizarMeses_(ss, sheet);
+  const ym = mesDoRotulo_(cel_(sheet, CEL_MES).getValue());
+  if (ym) return ym;
+
+  const lista = mesesComDados_(ss).map(rotuloMes_);
+  status_(sheet, lista.length
+    ? 'Escolha o mês de referência em B1. Com registros: ' + lista.join(', ') + '.'
+    : 'Nenhum registro na planilha ainda.');
+  return null;
+}
+
+// ─── GATILHO DAS CAIXAS ──────────────────────────────────────────────────────
+// Precisa ser INSTALÁVEL: o gatilho simples onEdit roda sem autorização e não
+// poderia criar abas nem apagar linhas. Por isso a função tem outro nome — se
+// ela se chamasse onEdit, o Sheets a chamaria também como gatilho simples e
+// metade das execuções falharia sem explicação.
+function aoEditar(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  if (sheet.getName() !== ABA || e.range.getValue() !== true) return;
+
+  const l = e.range.getRow(), c = e.range.getColumn();
+  if (l === CEL_CALC[0] && c === CEL_CALC[1]) {
+    e.range.setValue(false);
+    calcularHoras();
+  } else if (l === CEL_MOVER[0] && c === CEL_MOVER[1]) {
+    e.range.setValue(false);
+    moverDados();
+  }
+}
+
+// Menu → roda uma vez por planilha. Repetir é inofensivo: apaga o gatilho
+// anterior antes de criar, então nunca ficam dois disparando a mesma ação.
+function prepararPlanilha() {
+  const ss = SpreadsheetApp.getActive();
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'aoEditar') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('aoEditar').forSpreadsheet(ss).onEdit().create();
+
+  const sheet = getSheet_();
+  montarPainel_(sheet);
+  lerFeriados_(ss);
+  status_(sheet, 'Painel pronto. Escolha o mês em B1 e marque a caixinha da ação.');
+}
+
 // ─── JORNADAS E CÁLCULO DE HORAS ─────────────────────────────────────────────
-// A aba `Saidas` é o registro BRUTO e não muda: uma linha por marcação, com
-// foto e prova de vida. É o que se audita. Esta seção lê aquilo e escreve, em
-// outra aba, uma linha por JORNADA — com os pares de entrada/saída e as horas
-// já separadas por tipo. Nada aqui grava na aba de origem.
+// A aba de registros é o material BRUTO e não muda: uma linha por marcação. É o
+// que se audita. Esta seção lê aquilo e escreve, numa aba por MÊS, uma linha por
+// JORNADA — com os pares de entrada/saída e as horas já separadas por tipo.
 //
 // Por jornada, e não por dia civil: quem entra às 22:00 e sai às 06:00
 // trabalhou um turno só. Quebrado por data, esse turno vira duas linhas — uma
@@ -357,8 +599,7 @@ function json_(obj) {
 // 100%. Por isso cada par entrada/saída é fatiado na virada do dia antes de ser
 // classificado.
 
-const ABA_CALC = 'Jornadas';
-const ABA_FER  = 'Feriados';
+const ABA_FER = 'Feriados';
 
 const PARES_MAX   = 5;   // pares de entrada/saída que cabem numa linha
 const PAUSA_MAX_H = 4;   // pausa maior que isto começa uma jornada NOVA
@@ -366,10 +607,15 @@ const PAUSA_MAX_H = 4;   // pausa maior que isto começa uma jornada NOVA
 //                       continua a mesma jornada" no Admin do app. Se a
 //                       planilha usar um limite menor, ela parte em duas
 //                       jornadas um intervalo que o app aceitou como um só.
-const NORMAIS_H   = 8;   // jornada normal; o que passa disso é hora extra 50%
-const NOT_INI_H   = 21;  // adicional noturno das 21:00 …
-const NOT_FIM_H   = 5;   // … às 05:00
-const ADIC_NOT_PCT = 20; // percentual do adicional noturno
+
+// Jornada normal: 8h de segunda a sexta, 4h no sábado. O que passa disso no dia
+// é hora extra 50%. Domingo e feriado não têm parte normal — é tudo 100%.
+const NORMAIS_SEG_SEX_H = 8;
+const NORMAIS_SAB_H     = 4;
+
+const NOT_INI_H    = 21;  // adicional noturno das 21:00 …
+const NOT_FIM_H    = 5;   // … às 05:00
+const ADIC_NOT_PCT = 20;  // percentual do adicional noturno
 
 // Feriados de Unaí/MG em 2026. O .docx de origem trazia só data e dia da
 // semana, sem o nome de cada um — a coluna Descrição nasce vazia de propósito,
@@ -381,37 +627,148 @@ const FERIADOS_PADRAO = [
   '25/12/2026', '31/12/2026',
 ];
 
-const CAB_CALC = ['Nome', 'Início', 'Dia', 'Tipo de dia', 'Fim'];
-const CAB_FIM  = ['Pares', 'Pausas', 'Total trabalhado', 'Normais',
-                  'HE 50%', 'HE 100%', 'Adic. noturno ' + ADIC_NOT_PCT + '%',
-                  'Observação'];
+const CAB_CALC = ['Nome', 'Data', 'Dia', 'Tipo de dia'];
+const CAB_FIM  = ['Pausas', 'Total de horas', 'Normais', 'HE 50%', 'HE 100%',
+                  'Adic. noturno ' + ADIC_NOT_PCT + '%', 'Observação', 'Anotação'];
 
-function recalcularJornadas() {
-  const ss     = SpreadsheetApp.getActive();
-  const origem = ss.getSheetByName(ABA);
-  if (!origem || origem.getLastRow() < 2) {
-    ss.toast('Nenhum registro em "' + ABA + '" para calcular.', 'Jornadas', 6);
+// ─── AÇÃO 1: CALCULAR HORAS ──────────────────────────────────────────────────
+function calcularHoras() {
+  const ss    = SpreadsheetApp.getActive();
+  const sheet = getSheet_();
+  const ym    = mesEscolhido_(ss, sheet);
+  if (!ym) return;
+
+  // Lê a aba viva E o arquivo do mês, se ele já tiver sido movido: quem calcula
+  // depois de mover não pode receber "nenhum registro".
+  const marcacoes = lerTudo_(ss, ym);
+  if (!marcacoes.some(function (m) { return fmt_(m.t, 'yyyy-MM') === ym; })) {
+    const lista = mesesComDados_(ss).map(rotuloMes_);
+    status_(sheet, 'Nenhum registro em ' + rotuloMes_(ym) + '. Escolha outro mês em B1' +
+      (lista.length ? ' — com registros: ' + lista.join(', ') + '.' : '.'));
     return;
   }
 
-  const feriados  = lerFeriados_(ss);
-  const marcacoes = lerMarcacoes_(origem);
-  const jornadas  = agruparJornadas_(marcacoes);
-  const linhas    = jornadas.map(function (j) { return linhaJornada_(j, feriados); });
+  const feriados = lerFeriados_(ss);
+  // Agrupa sobre TODAS as marcações e só depois filtra pelo mês: cortar antes
+  // partiria ao meio a jornada que atravessa a virada do mês.
+  const jornadas = agruparJornadas_(marcacoes).filter(function (j) {
+    return fmt_(inicioDe_(j), 'yyyy-MM') === ym;
+  });
 
-  escreverCalc_(ss, linhas);
-  ss.toast(jornadas.length + ' jornada(s) a partir de ' + marcacoes.length +
-           ' marcação(ões).', 'Jornadas', 8);
+  const linhas = calcularLinhas_(jornadas, feriados);
+  const nome   = nomeAba_(ym, 'calculos');
+  escreverCalc_(ss, nome, linhas);
+
+  status_(sheet, linhas.length + ' jornada(s) de ' + rotuloMes_(ym) +
+          ' na aba "' + nome + '".');
 }
 
-// ── Leitura ──────────────────────────────────────────────────────────────────
-// O instante vem da coluna Chave (`nome|ISO`), não de Data+Hora: aquelas duas
+// ─── AÇÃO 2: MOVER DADOS ─────────────────────────────────────────────────────
+// Tira do caminho o mês já fechado sem perder nada: copia para a aba do mês,
+// confere que chegou, e só então apaga da origem.
+function moverDados() {
+  const ss    = SpreadsheetApp.getActive();
+  const sheet = getSheet_();
+  const ym    = mesEscolhido_(ss, sheet);
+  if (!ym) return;
+
+  const n = sheet.getLastRow() - LIN_CAB;
+  const rng   = n > 0 ? sheet.getRange(LIN_DADOS, 1, n, COLS.length) : null;
+  const vals  = rng ? rng.getValues()   : [];
+  const forms = rng ? rng.getFormulas() : [];
+
+  // A foto vive numa fórmula =IMAGE. getValues devolveria o resultado dela, que
+  // não se pode colar de volta — a fórmula tem que viajar como fórmula.
+  const linhas = vals.map(function (v, i) {
+    return v.map(function (c, j) { return forms[i][j] ? forms[i][j] : c; });
+  });
+
+  const escolhidas = [];
+  linhas.forEach(function (l, i) {
+    const chave = String(l[CHAVE - 1] || '');
+    if (mesDaChave_(chave) !== ym) return;
+    escolhidas.push({ linha: l, i: i, t: new Date(chave.substring(chave.lastIndexOf('|') + 1)) });
+  });
+
+  if (!escolhidas.length) {
+    const lista = mesesComDados_(ss).map(rotuloMes_);
+    status_(sheet, 'Nada a mover em ' + rotuloMes_(ym) + '. Escolha outro mês em B1' +
+      (lista.length ? ' — com registros: ' + lista.join(', ') + '.' : '.'));
+    return;
+  }
+
+  escolhidas.sort(function (a, b) {
+    const na = String(a.linha[1]), nb = String(b.linha[1]);
+    return na === nb ? a.t - b.t : (na < nb ? -1 : 1);
+  });
+
+  const destino = abaArquivo_(ss, nomeAba_(ym, 'registros'));
+  const ini = destino.getLastRow() + 1;
+  destino.getRange(ini, 1, escolhidas.length, COLS.length)
+         .setValues(escolhidas.map(function (x) { return x.linha; }));
+  posMover_(destino, ini, escolhidas.length);
+  SpreadsheetApp.flush();
+
+  // Só apaga depois que a escrita foi confirmada na planilha.
+  if (destino.getLastRow() < ini + escolhidas.length - 1) {
+    status_(sheet, 'A cópia não fechou — nada foi apagado. Tente de novo.');
+    return;
+  }
+
+  apagarLinhas_(sheet, escolhidas.map(function (x) { return LIN_DADOS + x.i; }));
+  const vazias = limparVazias_(sheet);
+
+  status_(sheet, escolhidas.length + ' registro(s) de ' + rotuloMes_(ym) +
+          ' movidos para "' + destino.getName() + '"' +
+          (vazias ? ' · ' + vazias + ' linha(s) em branco removida(s)' : '') + '.');
+}
+
+function abaArquivo_(ss, nome) {
+  let sh = ss.getSheetByName(nome);
+  if (sh) return sh;
+  sh = ss.insertSheet(nome);
+  sh.getRange(1, 1, 1, COLS.length).setValues([COLS])
+    .setFontWeight('bold').setBackground('#F1F5F9');
+  sh.setFrozenRows(1);
+  prepararArquivo_(sh);
+  return sh;
+}
+
+// Apaga de baixo para cima e em blocos: apagar de cima empurraria os índices
+// seguintes, e uma chamada por linha estoura o tempo em mês cheio.
+function apagarLinhas_(sheet, linhas) {
+  const ord = linhas.slice().sort(function (a, b) { return b - a; });
+  let i = 0;
+  while (i < ord.length) {
+    let j = i;
+    while (j + 1 < ord.length && ord[j + 1] === ord[j] - 1) j++;
+    sheet.deleteRows(ord[j], j - i + 1);
+    i = j + 1;
+  }
+}
+
+function limparVazias_(sheet) {
+  const n = sheet.getLastRow() - LIN_CAB;
+  if (n < 1) return 0;
+  const dados = sheet.getRange(LIN_DADOS, 1, n, COLS.length).getValues();
+  const vazias = [];
+  dados.forEach(function (l, i) {
+    const temAlgo = l.some(function (c) { return c !== '' && c !== null && c !== false; });
+    if (!temAlgo) vazias.push(LIN_DADOS + i);
+  });
+  if (vazias.length) apagarLinhas_(sheet, vazias);
+  return vazias.length;
+}
+
+// ─── Leitura ─────────────────────────────────────────────────────────────────
+// O instante vem da coluna Chave ("nome|ISO"), não de Data+Hora: aquelas duas
 // são texto formatado e o Sheets pode reinterpretá-las conforme o idioma da
 // planilha. O ISO da chave é o mesmo que o app gravou, sem ambiguidade.
-function lerMarcacoes_(sheet) {
-  const n = sheet.getLastRow() - 1;
+function lerMarcacoes_(sheet, primeiraLinha) {
+  const cab = primeiraLinha - 1;
+  const n = sheet.getLastRow() - cab;
   if (n < 1) return [];
-  const dados = sheet.getRange(2, 1, n, COLS.length).getValues();
+  const dados = sheet.getRange(primeiraLinha, 1, n, COLS.length).getValues();
   const out = [];
 
   dados.forEach(function (r) {
@@ -426,6 +783,25 @@ function lerMarcacoes_(sheet) {
       nome : chave.substring(0, corte) || String(r[1] || ''),
       tipo : String(r[2]) === 'Entrada' ? 'entry' : 'exit',
       t    : quando,
+      chave: chave,
+    });
+  });
+  return out;
+}
+
+// Aba viva + arquivo do mês, sem repetir o que estiver nos dois.
+function lerTudo_(ss, ym) {
+  const sheets = [ss.getSheetByName(ABA)];
+  const arq = ss.getSheetByName(nomeAba_(ym, 'registros'));
+  if (arq) sheets.push(arq);
+
+  const vistos = {}, out = [];
+  sheets.forEach(function (sh, i) {
+    if (!sh) return;
+    lerMarcacoes_(sh, i === 0 ? LIN_DADOS : 2).forEach(function (m) {
+      if (vistos[m.chave]) return;
+      vistos[m.chave] = true;
+      out.push(m);
     });
   });
 
@@ -435,7 +811,7 @@ function lerMarcacoes_(sheet) {
   return out;
 }
 
-// ── Agrupamento em jornadas ──────────────────────────────────────────────────
+// ─── Agrupamento em jornadas ─────────────────────────────────────────────────
 // Uma entrada abre a jornada; a saída fecha o par. Voltar de uma pausa CURTA
 // (até PAUSA_MAX_H) continua a mesma jornada — é o café, o almoço, a ronda.
 // Voltar depois de uma pausa longa é jornada nova. É a mesma leitura que o app
@@ -474,8 +850,29 @@ function agruparJornadas_(marcacoes) {
   return jornadas;
 }
 
-// ── Cálculo ──────────────────────────────────────────────────────────────────
-function linhaJornada_(j, feriados) {
+function inicioDe_(j) { return j.marcacoes[0].t; }
+
+// ─── Cálculo ─────────────────────────────────────────────────────────────────
+// A cota de horas normais (8h de segunda a sexta, 4h no sábado) é POR PESSOA e
+// POR DIA — mas contada no dia em que a JORNADA COMEÇOU, não em cada dia que ela
+// atravessa. As duas leituras divergem no turno da noite: quem entra 16:00 e sai
+// 08:00 do dia seguinte fez 15h45 de um fôlego só. Fatiado por dia civil daria
+// 7h50 numa data e 7h55 na outra — nenhuma passa de 8h, e o turno inteiro sairia
+// sem hora extra. Contado pelo dia de início, dá as 7h45 de extra que ele é.
+//
+// Duas jornadas no mesmo dia dividem a MESMA cota: a primeira gasta primeiro, e
+// a segunda só encontra o que sobrou. Por isso o mapa "usado" atravessa o
+// map — as jornadas chegam em ordem cronológica dentro de cada pessoa.
+function calcularLinhas_(jornadas, feriados) {
+  const usado = {};
+  return jornadas.map(function (j) { return linhaJornada_(j, feriados, usado); });
+}
+
+function limiteDoDia_(dataISO) {
+  return (dataObj_(dataISO).getDay() === 6 ? NORMAIS_SAB_H : NORMAIS_SEG_SEX_H) * 60;
+}
+
+function linhaJornada_(j, feriados, usado) {
   const marc  = j.marcacoes;
   const pares = [];
   let aberta  = null;
@@ -487,13 +884,16 @@ function linhaJornada_(j, feriados) {
     else        { orfa = true; }
   });
 
-  let trabalhado = 0, noturno = 0, domFer = 0;
+  let trabalhado = 0, noturno = 0, he100 = 0;
 
+  // Domingo e feriado são classificados pela data REAL de cada fatia: a parte de
+  // sábado de um turno que vira o domingo continua a 50%, só a parte do domingo
+  // é que vai a 100%.
   pares.forEach(function (p) {
     fatiar_(p[0], p[1]).forEach(function (f) {
       trabalhado += f.minutos;
       noturno    += f.noturnos;
-      if (ehDomingoOuFeriado_(f.data, feriados)) domFer += f.minutos;
+      if (ehDomingoOuFeriado_(f.data, feriados)) he100 += f.minutos;
     });
   });
 
@@ -502,14 +902,15 @@ function linhaJornada_(j, feriados) {
   let pausas = 0;
   for (let i = 1; i < pares.length; i++) pausas += (pares[i][0] - pares[i - 1][1]) / 60e3;
 
-  const uteis = trabalhado - domFer;
-  const he100 = domFer;                                     // domingo/feriado: tudo a 100%
-  const he50  = Math.max(0, uteis - NORMAIS_H * 60);        // seg–sáb: o que passa de 8h
-  const normais = uteis - he50;
-
-  const inicio = pares.length ? pares[0][0] : marc[0].t;
-  const fim    = aberta ? null : (pares.length ? pares[pares.length - 1][1] : marc[0].t);
+  const inicio  = pares.length ? pares[0][0] : marc[0].t;
   const dInicio = parteLocal_(inicio).data;
+
+  // O que não é 100% disputa a cota do dia em que a jornada começou.
+  const uteis   = trabalhado - he100;
+  const ja      = usado[j.nome + '|' + dInicio] || 0;
+  const normais = Math.min(uteis, Math.max(0, limiteDoDia_(dInicio) - ja));
+  const he50    = uteis - normais;
+  usado[j.nome + '|' + dInicio] = ja + uteis;
 
   const obs = [];
   if (aberta)                   obs.push('jornada aberta — falta a saída');
@@ -528,9 +929,7 @@ function linhaJornada_(j, feriados) {
     fmt_(inicio, 'dd/MM/yyyy'),
     diaCurto_(dInicio),
     tipoDeDia_(dInicio, feriados),
-    fim ? fmt_(fim, 'dd/MM/yyyy') : '',
   ].concat(horarios).concat([
-    pares.length,
     dur_(pausas),
     dur_(trabalhado),
     dur_(normais),
@@ -538,6 +937,7 @@ function linhaJornada_(j, feriados) {
     dur_(he100),
     dur_(noturno),
     obs.join(' · '),
+    '',
   ]);
 }
 
@@ -576,7 +976,8 @@ function ehDomingoOuFeriado_(dataISO, feriados) {
 
 function tipoDeDia_(dataISO, feriados) {
   if (feriados[dataISO]) return 'Feriado';
-  return dataObj_(dataISO).getDay() === 0 ? 'Domingo' : 'Útil';
+  const d = dataObj_(dataISO).getDay();
+  return d === 0 ? 'Domingo' : (d === 6 ? 'Sábado' : 'Útil');
 }
 
 const DIAS_CURTOS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
@@ -606,7 +1007,7 @@ function dur_(minutos) { return minutos / 1440; }
 
 function fmt_(d, padrao) { return Utilities.formatDate(d, TZ, padrao); }
 
-// ── Feriados ─────────────────────────────────────────────────────────────────
+// ─── Feriados ────────────────────────────────────────────────────────────────
 // Ficam numa aba, não no código: virar o ano é editar a planilha. A primeira
 // execução cria a aba já preenchida com 2026.
 function lerFeriados_(ss) {
@@ -639,15 +1040,21 @@ function lerFeriados_(ss) {
   return mapa;
 }
 
-// ── Escrita ──────────────────────────────────────────────────────────────────
-function escreverCalc_(ss, linhas) {
-  let sh = ss.getSheetByName(ABA_CALC);
-  if (!sh) sh = ss.insertSheet(ABA_CALC);
-  sh.clear();
+// ─── Escrita ─────────────────────────────────────────────────────────────────
+// A aba do mês é refeita do zero a cada cálculo — é o que garante que corrigir
+// um registro na origem se reflita aqui. A única coluna que sobrevive é a
+// "Anotação": ela é do humano, o script nunca escreve nada nela.
+function escreverCalc_(ss, nome, linhas) {
+  let sh = ss.getSheetByName(nome);
+  if (!sh) sh = ss.insertSheet(nome);
 
   const cab = CAB_CALC.slice();
   for (let i = 1; i <= PARES_MAX; i++) { cab.push('E' + i); cab.push('S' + i); }
   const cabecalho = cab.concat(CAB_FIM);
+  const COL_ANOT  = cabecalho.length;
+
+  const guardadas = anotacoesAtuais_(sh, cabecalho.length);
+  sh.clear();
 
   sh.getRange(1, 1, 1, cabecalho.length).setValues([cabecalho])
     .setFontWeight('bold').setBackground('#F1F5F9');
@@ -656,12 +1063,43 @@ function escreverCalc_(ss, linhas) {
 
   if (!linhas.length) return;
 
+  linhas.forEach(function (l) {
+    const g = guardadas[chaveLinha_(l)];
+    if (g) l[COL_ANOT - 1] = g;
+  });
+
   sh.getRange(2, 1, linhas.length, cabecalho.length).setValues(linhas);
 
-  // As sete colunas de tempo do fim: duração somável, não texto.
-  const iniDur = CAB_CALC.length + PARES_MAX * 2 + 2;      // após Nome…Fim, pares e "Pares"
+  // As seis colunas de tempo: duração somável, não texto.
+  const iniDur = CAB_CALC.length + PARES_MAX * 2 + 1;
   sh.getRange(2, iniDur, linhas.length, 6).setNumberFormat('[h]:mm');
 
   sh.setColumnWidth(1, 160);
   sh.getRange(1, 1, linhas.length + 1, cabecalho.length).setVerticalAlignment('middle');
+}
+
+function chaveLinha_(l) { return l[0] + '|' + l[1] + '|' + l[CAB_CALC.length]; }
+
+function anotacoesAtuais_(sh, largura) {
+  const n = sh.getLastRow() - 1;
+  const mapa = {};
+  if (n < 1 || sh.getLastColumn() < largura) return mapa;
+  sh.getRange(2, 1, n, largura).getValues().forEach(function (l) {
+    if (l[largura - 1]) mapa[chaveLinha_(l)] = l[largura - 1];
+  });
+  return mapa;
+}
+
+// ─── Ajustes desta planilha ─────────────────────────────────────────
+// A aba de arquivo recebe as mesmas colunas — inclusive a foto, que é fórmula, e
+// a caixinha "Conferido", que precisa ser recriada como caixinha: colada como
+// valor ela vira o texto TRUE/FALSE e ninguém mais consegue marcar.
+function prepararArquivo_(sh) {
+  sh.hideColumns(CHAVE);
+  sh.setColumnWidth(FOTO, ALTURA_LINHA);
+}
+
+function posMover_(sh, ini, n) {
+  sh.setRowHeights(ini, n, ALTURA_LINHA);
+  sh.getRange(ini, CONF, n, 1).insertCheckboxes();
 }

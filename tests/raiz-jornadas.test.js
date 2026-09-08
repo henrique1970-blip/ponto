@@ -39,13 +39,15 @@ const Utilities = {
 };
 
 const ctx = vm.createContext({
-  Utilities, console, Date, Math, String, Number, Array, JSON, isNaN,
-  SpreadsheetApp: {}, DriveApp: {}, ContentService: {}, LockService: {},
+  Utilities, console, Date, Math, String, Number, Array, Object, RegExp, JSON, isNaN,
+  SpreadsheetApp: {}, DriveApp: {}, ContentService: {}, LockService: {}, ScriptApp: {},
 });
 vm.runInContext(SRC + `
 ;globalThis.__gs = {
   COLS, CHAVE, TZ, ABA, FERIADOS_PADRAO, CAB_CALC, CAB_FIM, PARES_MAX,
-  lerMarcacoes_, agruparJornadas_, linhaJornada_,
+  PAINEL_LIN, LIN_CAB, LIN_DADOS,
+  lerMarcacoes_, lerTudo_, agruparJornadas_, calcularLinhas_, limiteDoDia_,
+  mesDaChave_, rotuloMes_, mesDoRotulo_, nomeAba_,
 };`, ctx);
 const gs = ctx.__gs;
 
@@ -59,7 +61,7 @@ function marcar(nome, tipo, data, hora) {
   return linha;
 }
 
-// 07/09/2026 é FERIADO (segunda) e 13/09 é DOMINGO.
+// 07/09/2026 é FERIADO (segunda), 12/09 é SÁBADO e 13/09 é DOMINGO.
 const LINHAS = [
   // Dia útil com almoço — na raiz isso já funciona sem trava nenhuma.
   marcar('Maria Silva', 'entry', '09-08', '07:00'),
@@ -89,12 +91,19 @@ const LINHAS = [
   // Domingo inteiro a 100%.
   marcar('Ana Souza',   'entry', '09-13', '07:00'),
   marcar('Ana Souza',   'exit',  '09-13', '12:00'),
+
+  // Sábado: mesmo horário da Maria, mas a jornada normal ali é de 4h.
+  marcar('Rita Nunes',  'entry', '09-12', '07:00'),
+  marcar('Rita Nunes',  'exit',  '09-12', '11:30'),
+  marcar('Rita Nunes',  'entry', '09-12', '12:30'),
+  marcar('Rita Nunes',  'exit',  '09-12', '17:00'),
 ];
 
 const sheetFalso = {
-  getLastRow: () => LINHAS.length + 1,
+  getLastRow: () => LINHAS.length + gs.LIN_CAB,
   getRange: () => ({ getValues: () => LINHAS }),
 };
+const ssFalso = { getSheetByName: n => (n === gs.ABA ? sheetFalso : null) };
 
 const FERIADOS = {};
 gs.FERIADOS_PADRAO.forEach(d => {
@@ -102,9 +111,9 @@ gs.FERIADOS_PADRAO.forEach(d => {
   FERIADOS[`${p[2]}-${p[1]}-${p[0]}`] = true;
 });
 
-const marcacoes = gs.lerMarcacoes_(sheetFalso);
+const marcacoes = gs.lerTudo_(ssFalso, '2026-09');
 const jornadas  = gs.agruparJornadas_(marcacoes);
-const linhas    = jornadas.map(j => gs.linhaJornada_(j, FERIADOS));
+const linhas    = gs.calcularLinhas_(jornadas, FERIADOS);
 
 const CAB = gs.CAB_CALC
   .concat(...Array.from({ length: gs.PARES_MAX }, (_, i) => [`E${i + 1}`, `S${i + 1}`]))
@@ -117,6 +126,11 @@ const hhmm = frac => {
 };
 const todas = nome => linhas.filter(l => l[0] === nome);
 const dos   = nome => todas(nome)[0];
+const pares = l => {
+  let n = 0;
+  for (let i = 0; i < gs.PARES_MAX; i++) if (l[col(`S${i + 1}`)]) n++;
+  return n;
+};
 
 let falhas = 0;
 function ok(cond, texto, extra = '') {
@@ -133,19 +147,23 @@ ok(gs.ABA === 'Registros', 'a aba de origem é "Registros"', gs.ABA);
 ok(gs.COLS.length === 10 && gs.CHAVE === 10,
    '10 colunas, Chave na J — o layout da raiz, não o do ponto2',
    gs.COLS.length + ' colunas, chave em ' + gs.CHAVE);
+ok(gs.LIN_CAB === 4 && gs.LIN_DADOS === 5,
+   'o painel empurrou o cabeçalho para a linha 4',
+   `${gs.LIN_CAB}/${gs.LIN_DADOS}`);
 ok(marcacoes.length === LINHAS.length, 'lê as ' + LINHAS.length + ' marcações');
 
 console.log('\n【2】 Almoço — na raiz não há trava, o segundo par entra sozinho');
-conf('Maria Silva', 'Total trabalhado', '9h00');
-conf('Maria Silva', 'Pausas',           '1h00');
-conf('Maria Silva', 'HE 50%',           '1h00');
+conf('Maria Silva', 'Total de horas', '9h00');
+conf('Maria Silva', 'Pausas',         '1h00');
+conf('Maria Silva', 'HE 50%',         '1h00');
 ok(dos('Maria Silva')[col('E2')] === '12:30', 'a volta do almoço ocupa a coluna E2');
 
 console.log('\n【3】 Turno noturno cortado na meia-noite');
-conf('José Lima', 'Total trabalhado',  '15h45');
+conf('José Lima', 'Total de horas',    '15h45');
+conf('José Lima', 'Normais',           '8h00');
 conf('José Lima', 'HE 50%',            '7h45');
 conf('José Lima', 'Adic. noturno 20%', '7h45');
-ok(dos('José Lima')[col('Pares')] === 2, 'os dois pedaços viram UMA jornada, com 2 pares');
+ok(pares(dos('José Lima')) === 2, 'os dois pedaços viram UMA jornada, com 2 pares');
 
 console.log('\n【4】 Turno noturno SEM cortar — tem que aparecer, não somar errado');
 const pedro = todas('Pedro Nunes');
@@ -153,24 +171,28 @@ ok(pedro.length === 2, 'as duas entradas soltas viram 2 jornadas', String(pedro.
 ok(pedro.every(l => l[col('Observação')].includes('jornada aberta')),
    'ambas marcadas como jornada aberta',
    pedro.map(l => l[col('Observação')]).join(' / '));
-ok(pedro.every(l => l[col('Total trabalhado')] === 0),
+ok(pedro.every(l => l[col('Total de horas')] === 0),
    'e nenhuma hora é inventada para elas');
 
-console.log('\n【5】 Feriado, domingo e a virada do dia');
-conf('Lincon Braga', 'Total trabalhado',  '8h10');
+console.log('\n【5】 Feriado, domingo, sábado e a virada do dia');
+conf('Lincon Braga', 'Total de horas',    '8h10');
 conf('Lincon Braga', 'HE 100%',           '3h50');
 conf('Lincon Braga', 'Normais',           '4h20');
 conf('Lincon Braga', 'Adic. noturno 20%', '5h40');
 ok(dos('Lincon Braga')[col('Tipo de dia')] === 'Feriado', '07/09 sai como Feriado');
 conf('Ana Souza', 'HE 100%', '5h00');
 ok(dos('Ana Souza')[col('Tipo de dia')] === 'Domingo', '13/09 sai como Domingo');
+conf('Rita Nunes', 'Normais', '4h00');
+conf('Rita Nunes', 'HE 50%',  '5h00');
+ok(dos('Rita Nunes')[col('Tipo de dia')] === 'Sábado',
+   '12/09 sai como Sábado, com cota de 4h');
 
 console.log('\n【6】 Somas fecham');
 const soma = campo => linhas.reduce((a, l) => a + l[col(campo)], 0);
 const partesSoma = soma('Normais') + soma('HE 50%') + soma('HE 100%');
-ok(Math.abs(partesSoma - soma('Total trabalhado')) < 1e-9,
-   'Normais + HE 50% + HE 100% = Total trabalhado',
-   hhmm(partesSoma) + ' vs ' + hhmm(soma('Total trabalhado')));
+ok(Math.abs(partesSoma - soma('Total de horas')) < 1e-9,
+   'Normais + HE 50% + HE 100% = Total de horas',
+   hhmm(partesSoma) + ' vs ' + hhmm(soma('Total de horas')));
 
 console.log('\n【7】 As duas cópias do Apps Script não podem divergir');
 // A raiz é autossuficiente: a tela de Admin mostra e copia o código SEM REDE,
@@ -191,11 +213,11 @@ ok(!embutido.includes('`') && !embutido.includes('${'),
    'e não tem crase nem ${…}, que quebrariam o literal');
 
 // ── Simulação impressa ───────────────────────────────────────────────────────
-const MOSTRAR = ['Nome', 'Início', 'Dia', 'Tipo de dia',
+const MOSTRAR = ['Nome', 'Data', 'Dia', 'Tipo de dia',
                  'E1', 'S1', 'E2', 'S2', 'E3', 'S3',
-                 'Pausas', 'Total trabalhado', 'Normais',
+                 'Pausas', 'Total de horas', 'Normais',
                  'HE 50%', 'HE 100%', 'Adic. noturno 20%', 'Observação'];
-const DUR = new Set(['Pausas', 'Total trabalhado', 'Normais',
+const DUR = new Set(['Pausas', 'Total de horas', 'Normais',
                      'HE 50%', 'HE 100%', 'Adic. noturno 20%']);
 
 const tabela = [MOSTRAR].concat(linhas.map(l =>
@@ -205,7 +227,7 @@ const tabela = [MOSTRAR].concat(linhas.map(l =>
   })));
 
 const larg = MOSTRAR.map((_, i) => Math.max(...tabela.map(r => r[i].length)));
-console.log('\n\n══ Raiz · aba "Jornadas" — como sairia na planilha ' + '═'.repeat(14) + '\n');
+console.log('\n\n══ Raiz · aba "setembro_calculos" — como sairia na planilha ' + '═'.repeat(12) + '\n');
 tabela.forEach((r, i) => {
   console.log('  ' + r.map((c, j) => c.padEnd(larg[j])).join(' │ '));
   if (i === 0) console.log('  ' + larg.map(w => '─'.repeat(w)).join('─┼─'));

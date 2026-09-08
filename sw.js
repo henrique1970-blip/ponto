@@ -17,7 +17,7 @@
 // em vez de deixá-lo servível a partir do cache.
 // v7: o Apps Script embutido ganhou a seção de jornadas e cálculo de horas.
 //     Sem o bump, a tela de Admin continuaria mostrando o código antigo.
-const CACHE_APP = 'ponto-app-v7';
+const CACHE_APP = 'ponto-app-v8';
 const CACHE_LIB = 'ponto-lib-v1';
 const MANTER    = [CACHE_APP, CACHE_LIB];
 

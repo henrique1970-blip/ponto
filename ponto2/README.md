@@ -305,12 +305,75 @@ operações, então esquecer de cortar não quebra par nenhum.
 > responde `Ponto Saida OK - v2 - Tipo dinamico (Entrada/Saida)`.
 > Registros antigos, que não trazem o campo, continuam sendo lidos como saída.
 
-## Aba `Jornadas` — horas calculadas
+## A aba passou a se chamar `Registros`
 
-**Menu Ponto Saída → Recalcular jornadas e horas.** A aba `Saidas` continua
-sendo o registro bruto e auditável — uma linha por marcação, com foto e prova
-de vida — e não é tocada. O cálculo sai numa aba própria, refeita do zero a
-cada execução: se algo sair errado, nenhum dado foi perdido.
+Ela nasceu `Saidas`, de quando o app só registrava saída. Agora que todo o
+quadro bate entrada e saída, o nome virou `Registros` — o mesmo do app da raiz.
+
+**Renomear à mão não bastava, e é por isso que aparecia uma `Saidas` repetida
+com um registro só:** o código continuava procurando pelo nome antigo, não
+achava, e criava a aba de novo a cada ponto batido. A troca acontece agora no
+próprio código, ao colar a versão nova:
+
+- só existe `Saidas` → ela é **renomeada**, com histórico, formatação e fotos;
+- existem as duas → o que estiver na `Saidas` e faltar na `Registros` é
+  **absorvido pela chave**, e a aba antiga é aposentada como
+  `Saidas (migrada dd-MM-aaaa HH.mm)`. **Nada é apagado** — confira e apague à
+  mão quando quiser.
+
+## Painel de botões
+
+O Apps Script não consegue criar um desenho e amarrar uma função a ele — isso
+só existe pelo menu do Sheets, à mão, e some se a planilha for copiada. O que
+ele consegue criar sozinho é uma **caixa de seleção**, e marcar uma caixa
+dispara o script. É o botão que vem junto com o código.
+
+O painel ocupa as **3 primeiras linhas** da `Registros`; o cabeçalho desceu
+para a linha 4 e os registros começam na 5. A migração **empurra** as linhas
+para baixo — nenhum registro se perde.
+
+|  | A | B |
+|---|---|---|
+| **1** | Mês de referência | `setembro/2026` ▾ — e, na D1, a resposta da última ação |
+| **2** | ☐ | ◀ Calcular horas do mês |
+| **3** | ☐ | ◀ Mover os dados do mês |
+
+A lista suspensa da B1 só oferece **meses que têm registro**, e se atualiza
+sozinha. Marcada a caixinha, ela se desmarca e a ação roda; o resultado aparece
+na D1 e num aviso flutuante.
+
+> **Rode uma vez: menu Ponto → ① Preparar planilha (painel de botões).** É o
+> que instala o gatilho das caixinhas — sem ele o painel aparece, mas marcar a
+> caixa não faz nada. O Google vai pedir autorização na primeira vez. Os dois
+> botões também estão no menu, se preferir.
+
+### Botão 1 — Calcular horas do mês
+
+Escreve a aba **`<mês>_calculos`** (`agosto_calculos`), criada se não existir e
+**refeita do zero** a cada execução: corrigir um registro na origem e recalcular
+sempre bate. Uma linha por **jornada**, ordenada por funcionário.
+
+Lê a `Registros` **e** a `<mês>_registros`, se o mês já tiver sido movido — o
+botão continua funcionando depois do arquivamento.
+
+### Botão 2 — Mover os dados do mês
+
+Tira do caminho o mês fechado: copia para **`<mês>_registros`**
+(`agosto_registros`) ordenado por funcionário, **confere que a cópia chegou**, e
+só então apaga da origem, eliminando de passagem as linhas em branco. A foto
+viaja como fórmula e a caixinha *Conferido* é recriada como caixinha.
+
+Calcule **antes** de mover: assim a jornada que atravessa a virada do mês
+enxerga as duas pontas.
+
+> As abas levam só o nome do mês (`agosto_calculos`), como pedido. Se o mês
+> escolhido **não** for do ano corrente, o ano entra junto
+> (`agosto_2025_calculos`) — dois agostos não podem cair na mesma aba.
+
+## A aba do mês — horas calculadas
+
+A `Registros` continua sendo o registro bruto e auditável — uma linha por
+marcação, com foto e prova de vida — e **não é tocada** pelos cálculos.
 
 Uma linha por **jornada**, não por dia civil. Quem entra às 22:00 e sai às
 06:00 trabalhou um turno só; quebrado por data, esse turno viraria duas linhas
@@ -319,12 +382,13 @@ história. Marcação que caiu no dia seguinte vem com `+1` ao lado da hora.
 
 | Coluna | O que traz |
 |---|---|
-| Nome · Início · Dia · Tipo de dia · Fim | identificação da jornada; *Tipo de dia* é Útil, Domingo ou Feriado |
+| Nome · Data · Dia · Tipo de dia | identificação da jornada; *Tipo de dia* é Útil, Sábado, Domingo ou Feriado |
 | `E1 S1 … E5 S5` | até **5 pares** de entrada/saída — o vão entre `S1` e `E2` é o almoço, o café, a ronda |
 | Pausas | soma dos vãos entre os pares. **Não conta como hora trabalhada** |
-| Total trabalhado | soma dos pares |
+| Total de horas | soma dos pares |
 | Normais · HE 50% · HE 100% · Adic. noturno 20% | o cálculo, abaixo |
 | Observação | jornada aberta, saída órfã, pares além do limite |
+| Anotação | **coluna sua** — o script nunca escreve nela, e o que você digitar sobrevive ao próximo recálculo |
 
 As colunas de tempo são **duração de verdade** (formato `[h]:mm`), não texto —
 somam numa célula de total.
@@ -336,19 +400,28 @@ classificado. Sem isso, uma jornada que começa no sábado e entra no domingo
 seria julgada inteira pelo dia em que começou.
 
 - **HE 100%** — horas caídas em **domingo ou feriado**, todas elas.
-- **HE 50%** — nas horas de segunda a sábado, o que passa de **8h** na jornada.
-- **Normais** — o restante das horas de segunda a sábado.
+- **HE 50%** — o que passa da jornada normal: **8h de segunda a sexta**, **4h
+  no sábado**.
+- **Normais** — o restante.
 - **Adicional noturno 20%** — horas entre **21:00 e 05:00**, de qualquer dia.
   É um adicional que **se soma** aos outros: a mesma hora pode ser extra e
   noturna.
 
-`Normais + HE 50% + HE 100% = Total trabalhado` — há teste garantindo que fecha.
+`Normais + HE 50% + HE 100% = Total de horas` — há teste garantindo que fecha.
+
+**A cota de 8h (ou 4h) é por pessoa e por dia, contada no dia em que a jornada
+COMEÇOU.** As duas leituras divergem no turno da noite: quem entra 16:00 e sai
+08:00 fez 15h45 de um fôlego só; fatiado por dia civil daria 7h50 numa data e
+7h55 na outra — nenhuma passa de 8h, e o turno inteiro sairia **sem hora
+extra**. Contado pelo dia de início, dá as 7h45 de extra que ele é. E duas
+jornadas no mesmo dia **dividem a mesma cota**: a primeira gasta primeiro.
 
 > ⚠️ O percentual de 20% e a faixa 21:00–05:00 vieram da especificação da
 > operação, não da lei — a CLT urbana usa 20% sobre 22:00–05:00 com hora
 > reduzida de 52'30", e a lei rural usa 25% sobre 21:00–05:00 sem redução.
 > Confira contra a convenção coletiva. Os valores estão em constantes no topo
-> da seção (`NOT_INI_H`, `NOT_FIM_H`, `ADIC_NOT_PCT`, `NORMAIS_H`).
+> da seção (`NOT_INI_H`, `NOT_FIM_H`, `ADIC_NOT_PCT`, `NORMAIS_SEG_SEX_H`,
+> `NORMAIS_SAB_H`).
 
 ### O que separa duas jornadas
 
@@ -364,9 +437,21 @@ Ficam na aba **`Feriados`**, criada na primeira execução já preenchida com os
 documento de origem trazia só data e dia da semana, então a coluna *Descrição*
 nasce vazia — preencha se quiser.
 
-> **Não precisa reimplantar o app da web.** `doPost` e `doGet` não mudaram; o
-> menu roda sempre o código salvo no editor. Basta colar o `apps-script.gs`
-> novo e recarregar a planilha.
+> ⚠️ **Desta vez PRECISA reimplantar o app da web.** O `doPost` mudou — é ele
+> que grava na aba, e agora ela se chama `Registros` e tem o cabeçalho na linha
+> 4. Colar o código no editor **não** muda o que a URL `/exec` executa: a
+> implantação aponta para uma versão congelada. Sem reimplantar, os pontos
+> batidos no celular continuam criando a `Saidas` velha.
+>
+> 1. Cole o `apps-script.gs` novo e **salve**.
+> 2. **Implantar → Gerenciar implantações → ✏️ → Versão: Nova versão.**
+>    (Não crie uma implantação NOVA: a URL mudaria e o app pararia de enviar.)
+> 3. **Recarregue a planilha** — é o que faz o menu aparecer.
+> 4. Menu **Ponto → ① Preparar planilha**, e aceite a autorização.
+>
+> Para conferir o que está no ar, abra a URL do webhook no navegador: ela
+> responde `Ponto Saida OK - v3 - Aba Registros, painel de botoes, calculo por
+> mes`. O menu e as caixinhas, esses sim, rodam sempre o código salvo no editor.
 
 ## Intervalo dentro da jornada
 
@@ -375,8 +460,7 @@ café — e não abre jornada nova. Na volta, a trava de 12h não se aplica: val
 o intervalo curto (5 min), que segue barrando o toque duplo na tela de sucesso.
 
 Sem isso, quem saísse para o almoço às 11:30 só voltaria a bater às 23:30, e a
-coluna `E2` da aba `Jornadas` nunca encheria. Foi essa trava que motivou a
-mudança.
+coluna `E2` da aba do mês nunca encheria. Foi essa trava que motivou a mudança.
 
 Passada a pausa máxima, voltar é começar **outra jornada**, e a trava de 12h
 volta a valer. Quem está marcado como **plantão** não tem esse limite: para
