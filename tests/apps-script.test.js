@@ -106,6 +106,11 @@ function rodar(sheetInicial, records) {
         requireValueInList(){ return this; }, setAllowInvalid(){ return this; },
         build(){ return { lista: true }; },
       }),
+      getUi(){
+        const m = { createMenu(){ return m; }, addItem(){ return m; },
+                    addSeparator(){ return m; }, addToUi(){ return m; } };
+        return { createMenu: () => m };
+      },
     },
     LockService: { getScriptLock: () => ({ waitLock(){ locks.push('lock'); }, releaseLock(){ locks.push('unlock'); } }) },
     Utilities: {
@@ -126,8 +131,17 @@ function rodar(sheetInicial, records) {
   };
   vm.createContext(ctx);
   vm.runInContext(SRC, ctx);
+  if (!records) return { ss, ctx, locks };
   const res = ctx.doPost({ postData: { contents: JSON.stringify({ records }) } });
   return { sheet: ss._s, resp: JSON.parse(res._t), locks };
+}
+
+// Abre a planilha sem enviar registro nenhum — é o que o usuário faz ao colar
+// o código e recarregar a página.
+function abrir(sheetInicial) {
+  const { ss, ctx } = rodar(sheetInicial, null);
+  ctx.onOpen();
+  return ss._s;
 }
 
 let falhas = 0;
@@ -243,6 +257,25 @@ console.log('\n【E】 Lock');
 {
   const { locks } = rodar(null, [rec(1,'X','2026-07-31T15:00:00.000Z',5)]);
   ok(locks.join(',') === 'lock,unlock', 'lock adquirido e liberado', locks.join(','));
+}
+
+console.log('\n【F】 Abrir a planilha já desenha o painel');
+{
+  // Foi o furo relatado: colar o código e recarregar mostrava o menu e mais
+  // nada. O painel só nascia no primeiro clique de um item do menu.
+  const atual = [
+    HDR10.slice(),
+    [1,'Maria','Entrada','31/07/2026','09:00:00','Fazenda',-19.9,-43.9,12,'Maria|2026-07-31T12:00:00.000Z'],
+  ];
+  const sheet = abrir(novaPlanilha(atual));
+  ok(sheet._d[0][0] === 'M\u00eas de refer\u00eancia', 'o painel está desenhado só de abrir',
+     JSON.stringify(sheet._d[0][0]));
+  ok(sheet._caixas.includes('2,1') && sheet._caixas.includes('3,1'),
+     'com as duas caixinhas', JSON.stringify(sheet._caixas));
+  ok(String(sheet._d[0][3]).indexOf('Preparar planilha') > 0,
+     'a D1 avisa que falta armar as caixinhas', String(sheet._d[0][3]));
+  ok(sheet._d[D0][9] === 'Maria|2026-07-31T12:00:00.000Z',
+     'e a linha da Maria desceu inteira', sheet._d[D0][9]);
 }
 
 console.log('\n' + (falhas ? `❌ ${falhas} falha(s)` : '✅ todos os testes passaram'));

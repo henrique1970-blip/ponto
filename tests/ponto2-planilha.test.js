@@ -113,7 +113,11 @@ function contexto(ss) {
                     setRanges(){ return b; }, build(){ return {}; } };
         return b;
       },
-      getUi(){ throw new Error('sem interface'); },
+      getUi(){
+        const m = { createMenu(){ return m; }, addItem(){ return m; },
+                    addSeparator(){ return m; }, addToUi(){ return m; } };
+        return { createMenu: () => m };
+      },
     },
     LockService: { getScriptLock: () => ({ waitLock(){}, releaseLock(){} }) },
     Utilities: {
@@ -301,6 +305,39 @@ console.log('\n【5】 Mês sem registro — avisa e não cria aba nenhuma');
   // acontecer pela tela — a mensagem cobre quem digitou ou moveu os dados.
   ok(String(reg._d[0][3]).indexOf('agosto/2026') > 0,
      'e o painel diz onde há registro', String(reg._d[0][3]));
+}
+
+console.log('\n【6】 Abrir a planilha já desenha o painel');
+{
+  // Foi o furo relatado: colar o código e recarregar mostrava o menu e mais
+  // nada. O painel só nascia no primeiro clique de um item do menu.
+  const velha = novaAba('Saidas', [
+    COLS16.slice(),
+    linha(1, 'Maria', 'Entrada', '2026-08-03', '07:00'),
+  ]);
+  const ss = novaPlanilha([velha]);
+  const ctx = contexto(ss);
+  ctx.onOpen();
+
+  const reg = ss.getSheetByName('Registros');
+  ok(!!reg, 'a aba migrou de nome só de abrir',
+     ss.getSheets().map(s=>s.getName()).join(', '));
+  ok(reg._d[0][0] === 'M\u00eas de refer\u00eancia', 'e o painel está desenhado',
+     JSON.stringify(reg._d[0][0]));
+  ok(reg._caixas.includes('2,1') && reg._caixas.includes('3,1'),
+     'com as duas caixinhas', JSON.stringify(reg._caixas));
+  ok(String(reg._d[0][3]).indexOf('Preparar planilha') > 0,
+     'a D1 avisa que falta armar as caixinhas', String(reg._d[0][3]));
+  ok(reg._d[D0][9] === 'Maria|2026-08-03T07:00:00-03:00',
+     'e o registro continua lá, inteiro', reg._d[D0][9]);
+
+  // Reabrir não pode redesenhar por cima nem empilhar linhas de painel.
+  reg._d[0][3] = 'resultado da última ação';
+  ctx.onOpen();
+  ok(reg._d.length === CAB + 1, 'reabrir não insere painel de novo',
+     'linhas: ' + reg._d.length);
+  ok(reg._d[0][3] === 'resultado da última ação',
+     'e não apaga a resposta da última ação', String(reg._d[0][3]));
 }
 
 console.log('\n' + (falhas ? `❌ ${falhas} falha(s)` : '✅ todos os testes passaram'));

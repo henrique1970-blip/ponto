@@ -338,6 +338,9 @@ para baixo — nenhum registro se perde.
 | **2** | ☐ | ◀ Calcular horas do mês |
 | **3** | ☐ | ◀ Mover os dados do mês |
 
+O painel é desenhado sozinho ao ABRIR a planilha, na primeira vez depois de
+colar o código — não é preciso rodar nada para ele aparecer.
+
 A lista suspensa da B1 só oferece **meses que têm registro**, e se atualiza
 sozinha. Marcada a caixinha, ela se desmarca e a ação roda; o resultado aparece
 na D1 e num aviso flutuante.
@@ -446,7 +449,7 @@ nasce vazia — preencha se quiser.
 > 1. Cole o `apps-script.gs` novo e **salve**.
 > 2. **Implantar → Gerenciar implantações → ✏️ → Versão: Nova versão.**
 >    (Não crie uma implantação NOVA: a URL mudaria e o app pararia de enviar.)
-> 3. **Recarregue a planilha** — é o que faz o menu aparecer.
+> 3. **Recarregue a planilha** — é o que faz o menu e o painel aparecerem.
 > 4. Menu **Ponto → ① Preparar planilha**, e aceite a autorização.
 >
 > Para conferir o que está no ar, abra a URL do webhook no navegador: ela

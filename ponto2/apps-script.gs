@@ -174,6 +174,26 @@ function onOpen() {
     .addItem('Destacar registros a conferir', 'formatarPlanilha')
     .addItem('Quantos faltam conferir?', 'resumoConferencia')
     .addToUi();
+
+  // O painel é desenhado AQUI, ao abrir — não só quando alguém roda um item do
+  // menu. Sem isto, quem colava o código e recarregava a planilha via o menu
+  // aparecer e mais nada: as caixinhas só nasciam no primeiro clique.
+  //
+  // Gatilho simples roda sem autorização, então dá para escrever na própria
+  // planilha, mas NÃO dá para instalar o gatilho das caixinhas — isso continua
+  // sendo o "① Preparar planilha", e a D1 avisa enquanto ele não rodar. O
+  // try/catch é para que uma falha aqui nunca leve o menu junto.
+  try { desenharPainel_(); } catch (_) { /* modo restrito: o menu já está lá */ }
+}
+
+function desenharPainel_() {
+  const ss = SpreadsheetApp.getActive();
+  if (!ss.getSheetByName(ABA) && !ss.getSheetByName(ABA_ANTIGA)) return;   // planilha ainda sem registro nenhum: não há o que mostrar
+
+  const sheet = getSheet_();
+  if (temPainel_(sheet) && cel_(sheet, CEL_STATUS).getValue()) return;
+  status_(sheet, 'Painel criado. Rode "Ponto → ① Preparar planilha" uma vez ' +
+                 'para as caixinhas passarem a funcionar.');
 }
 
 // Formatação condicional: as regras ficam gravadas na planilha e valem também
