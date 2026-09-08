@@ -469,6 +469,11 @@ function getSheet_() {
   // Planilha do layout de 9 colunas (Chave na I, sem Precisão): abre espaço na I.
   // insertColumnBefore arrasta a coluna Chave inteira — COM os dados — para a J,
   // então as chaves já gravadas continuam valendo e nada volta em duplicata.
+  // A grade pode ser mais estreita do que COLS pede (a "Anulado" entrou depois):
+  // sem abrir espaço, escrever o cabeçalho estouraria.
+  const falta = COLS.length - sheet.getMaxColumns();
+  if (falta > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), falta);
+
   const linCab = temPainel_(sheet) ? LIN_CAB : 1;
   if (sheet.getRange(linCab, PREC).getValue() === 'Chave') sheet.insertColumnBefore(PREC);
 
