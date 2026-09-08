@@ -167,6 +167,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Ponto')
     .addItem('① Preparar planilha (painel de botões)', 'prepararPlanilha')
+    .addItem('Verificar (o script está autorizado?)', 'verificar')
     .addSeparator()
     .addItem('Calcular horas do mês', 'calcularHoras')
     .addItem('Mover dados do mês', 'moverDados')
@@ -192,8 +193,8 @@ function desenharPainel_() {
 
   const sheet = getSheet_();
   if (temPainel_(sheet) && cel_(sheet, CEL_STATUS).getValue()) return;
-  status_(sheet, 'Painel criado. Rode "Ponto → ① Preparar planilha" uma vez ' +
-                 'para as caixinhas passarem a funcionar.');
+  status_(sheet, 'Painel criado. Rode "Ponto → ① Preparar planilha" ' +
+                 'para as caixinhas passarem a funcionar (o Google vai pedir autorização uma vez).');
 }
 
 // Formatação condicional: as regras ficam gravadas na planilha e valem também
@@ -592,7 +593,7 @@ function aoEditar(e) {
 
 // Menu → roda uma vez por planilha. Repetir é inofensivo: apaga o gatilho
 // anterior antes de criar, então nunca ficam dois disparando a mesma ação.
-function prepararPlanilha() {
+function prepararPlanilha_() {
   const ss = SpreadsheetApp.getActive();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'aoEditar') ScriptApp.deleteTrigger(t);
@@ -652,7 +653,7 @@ const CAB_FIM  = ['Pausas', 'Total de horas', 'Normais', 'HE 50%', 'HE 100%',
                   'Adic. noturno ' + ADIC_NOT_PCT + '%', 'Observação', 'Anotação'];
 
 // ─── AÇÃO 1: CALCULAR HORAS ──────────────────────────────────────────────────
-function calcularHoras() {
+function calcularHoras_() {
   const ss    = SpreadsheetApp.getActive();
   const sheet = getSheet_();
   const ym    = mesEscolhido_(ss, sheet);
@@ -686,7 +687,7 @@ function calcularHoras() {
 // ─── AÇÃO 2: MOVER DADOS ─────────────────────────────────────────────────────
 // Tira do caminho o mês já fechado sem perder nada: copia para a aba do mês,
 // confere que chegou, e só então apaga da origem.
-function moverDados() {
+function moverDados_() {
   const ss    = SpreadsheetApp.getActive();
   const sheet = getSheet_();
   const ym    = mesEscolhido_(ss, sheet);
@@ -1122,4 +1123,80 @@ function prepararArquivo_(sh) {
 function posMover_(sh, ini, n) {
   sh.setRowHeights(ini, n, ALTURA_LINHA);
   sh.getRange(ini, CONF, n, 1).insertCheckboxes();
+}
+
+// As três ações do menu passam por comAviso_: nenhuma delas pode falhar calada.
+function calcularHoras()    { comAviso_('Calcular horas', calcularHoras_); }
+function moverDados()       { comAviso_('Mover dados', moverDados_); }
+function prepararPlanilha() { comAviso_('Preparar planilha', prepararPlanilha_); }
+
+// ─── VERIFICAÇÃO ─────────────────────────────────────────────────────────────
+// "Cliquei no menu e não aconteceu nada" tem quase sempre uma causa só: a
+// autorização do Google não foi concedida, e aí NENHUMA função de menu chega a
+// rodar. O painel aparece assim mesmo, porque quem o desenha é o onOpen — que é
+// gatilho simples e roda sem autorização. Os dois fatos juntos parecem bug no
+// código e não são.
+//
+// Esta função é a prova: se ela responder alguma coisa, o script ESTÁ
+// autorizado e o problema é outro — e ela diz qual.
+function verificar() {
+  const ss = SpreadsheetApp.getActive();
+  const l  = [];
+
+  l.push('Planilha: ' + ss.getName());
+  l.push('Versão do código: ' + VERSAO);
+  l.push('');
+
+  const sheet = ss.getSheetByName(ABA);
+  if (!sheet) {
+    l.push('Aba "' + ABA + '": NÃO EXISTE.');
+  } else {
+    l.push('Aba "' + ABA + '": ' + Math.max(0, sheet.getLastRow() - LIN_CAB) + ' registro(s)');
+    l.push('Painel desenhado: ' + (temPainel_(sheet) ? 'sim' : 'NÃO'));
+    l.push('Mês escolhido (B1): ' + (cel_(sheet, CEL_MES).getValue() || '(vazio)'));
+  }
+
+  const meses = mesesComDados_(ss).map(rotuloMes_);
+  l.push('Meses com registro: ' + (meses.length ? meses.join(', ') : 'nenhum'));
+
+  let gat = 'NÃO instalado — rode "① Preparar planilha"';
+  try {
+    const n = ScriptApp.getProjectTriggers().filter(function (t) {
+      return t.getHandlerFunction() === 'aoEditar';
+    }).length;
+    if (n) gat = n + ' instalado(s) — as caixinhas funcionam';
+  } catch (err) {
+    gat = 'não deu para verificar (' + err.message + ')';
+  }
+  l.push('Gatilho das caixinhas: ' + gat);
+
+  l.push('');
+  l.push('Abas: ' + ss.getSheets().map(function (s) { return s.getName(); }).join(' · '));
+
+  const txt = l.join('\n');
+  Logger.log(txt);
+  try {
+    const ui = SpreadsheetApp.getUi();
+    ui.alert('Verificação', txt, ui.ButtonSet.OK);
+  } catch (_) { /* sem interface: fica no Registro de execuções */ }
+  return txt;
+}
+
+// Erro em ação de menu costuma sumir: o Sheets mostra um aviso vermelho que
+// passa sozinho e não deixa rastro na planilha. Aqui ele vira um alerta que
+// exige OK e um texto na D1, que fica — e continua subindo para o Registro de
+// execuções, que é onde está a pilha.
+function comAviso_(nome, fn) {
+  try {
+    fn();
+  } catch (err) {
+    const msg = nome + ' falhou: ' + ((err && err.message) ? err.message : String(err));
+    try {
+      const ui = SpreadsheetApp.getUi();
+      ui.alert(nome, msg + '\n\nDetalhes em Extensões → Apps Script → Execuções.',
+               ui.ButtonSet.OK);
+    } catch (_) { /* sem interface */ }
+    try { status_(SpreadsheetApp.getActive().getSheetByName(ABA), msg); } catch (_) {}
+    throw err;
+  }
 }

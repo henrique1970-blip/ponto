@@ -451,6 +451,40 @@ nasce vazia — preencha se quiser.
 >    (Não crie uma implantação NOVA: a URL mudaria e o app pararia de enviar.)
 > 3. **Recarregue a planilha** — é o que faz o menu e o painel aparecerem.
 > 4. Menu **Ponto → ① Preparar planilha**, e aceite a autorização.
+
+### "Cliquei no menu e não aconteceu nada"
+
+É o sintoma da **autorização não concedida**, e ele engana porque o painel
+aparece assim mesmo: quem desenha o painel é o `onOpen`, que é *gatilho
+simples* e roda sem autorização nenhuma. Item de menu, não — ele precisa de
+permissão, e sem ela **nenhum** deles roda. Os dois fatos juntos parecem bug no
+código e não são.
+
+O primeiro clique deveria abrir a tela de consentimento do Google. Se o
+navegador bloquear a janela, ou se ela for fechada, o resultado é exatamente
+"nada acontece". Force a autorização pelo editor, onde ela não pode ser
+bloqueada:
+
+1. **Extensões → Apps Script.**
+2. Na barra de cima, escolha a função **`verificar`** na lista e clique **▶
+   Executar**.
+3. Aparece *"É necessário autorizar"* → **Revisar permissões** → escolha a
+   conta → se disser *"O Google não verificou este app"*, clique em
+   **Avançado → Acessar (nome do projeto)** → **Permitir**.
+4. Volte à planilha. O menu funciona a partir daí.
+
+O item **Verificar (o script está autorizado?)** existe para isso: se ele
+responder qualquer coisa, o script está autorizado e o problema é outro — e a
+janela dele diz qual (painel desenhado ou não, mês escolhido, meses com
+registro, gatilho das caixinhas instalado ou não).
+
+Se ainda assim não abrir nada, o registro completo está em **Extensões → Apps
+Script → Execuções** (ícone ⏱ na barra lateral): cada clique de menu vira uma
+linha ali, com o erro. **Nenhuma linha** = a função nem começou, e aí é
+autorização mesmo.
+
+> As três ações passam a avisar quando falham: em vez do aviso vermelho que
+> some sozinho, um alerta que exige OK e o texto do erro na **D1**, que fica.
 >
 > Para conferir o que está no ar, abra a URL do webhook no navegador: ela
 > responde `Ponto Saida OK - v3 - Aba Registros, painel de botoes, calculo por
