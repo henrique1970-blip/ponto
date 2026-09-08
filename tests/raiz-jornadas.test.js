@@ -144,8 +144,8 @@ function conf(nome, campo, esperado) {
 
 console.log('\n【1】 A planilha da raiz é a `Registros`, com layout próprio');
 ok(gs.ABA === 'Registros', 'a aba de origem é "Registros"', gs.ABA);
-ok(gs.COLS.length === 10 && gs.CHAVE === 10,
-   '10 colunas, Chave na J — o layout da raiz, não o do ponto2',
+ok(gs.COLS.length === 11 && gs.CHAVE === 10,
+   '11 colunas, Chave na J — o layout da raiz, não o do ponto2',
    gs.COLS.length + ' colunas, chave em ' + gs.CHAVE);
 ok(gs.LIN_CAB === 4 && gs.LIN_DADOS === 5,
    'o painel empurrou o cabeçalho para a linha 4',

@@ -32,9 +32,12 @@ function novaPlanilha(grid, nome) {
     getLastRow(){ return this._d.length; },
     getLastColumn(){ return this._d.reduce((m,r)=>Math.max(m,r.length),0); },
     getMaxRows(){ return Math.max(this._d.length, 1000); },
-    getMaxColumns(){ return Math.max(this.getLastColumn(), 10); },
+    getMaxColumns(){ return Math.max(this.getLastColumn(), 11); },
     setFrozenRows(n){ this._frozen = n; return this; },
     setColumnWidth(){ return this; },
+    _regras: [],
+    getConditionalFormatRules(){ return this._regras; },
+    setConditionalFormatRules(rs){ this._regras = rs; return this; },
     hideColumns(c){ if(!this._hidden.includes(c)) this._hidden.push(c); },
     appendRow(r){ this._d.push(r.slice()); },
     insertRowsBefore(lin, quantas){
@@ -102,10 +105,18 @@ function rodar(sheetInicial, records) {
     SpreadsheetApp: {
       getActiveSpreadsheet: () => ss,
       getActive: () => ss,
-      newDataValidation: () => ({
-        requireValueInList(){ return this; }, setAllowInvalid(){ return this; },
-        build(){ return { lista: true }; },
-      }),
+      newConditionalFormatRule: () => {
+        const b = { whenFormulaSatisfied(f){ b._f = f; return b; }, setBackground(){ return b; },
+                    setFontColor(){ return b; }, setStrikethrough(){ return b; },
+                    setRanges(){ return b; },
+                    build(){ return { getBooleanCondition: () => ({ getCriteriaValues: () => [b._f] }) }; } };
+        return b;
+      },
+      newDataValidation: () => {
+        const b = { requireValueInList(){ return b; }, requireCheckbox(){ return b; },
+                    setAllowInvalid(){ return b; }, build(){ return { lista: true }; } };
+        return b;
+      },
       getUi(){
         const m = { createMenu(){ return m; }, addItem(){ return m; },
                     addSeparator(){ return m; }, addToUi(){ return m; } };
@@ -149,7 +160,10 @@ const ok = (c, nome, extra='') => {
   console.log((c?'  ✅ ':'  ❌ ')+nome+(c?'':'  → '+extra)); if(!c) falhas++;
 };
 
-const HDR10 = ['ID','Nome','Tipo','Data','Hora','Local','Latitude','Longitude','Precisão (m)','Chave'];
+// 11 colunas desde que a "Anulado" entrou no fim: a Chave continua na J, que é
+// o que a deduplicação exige.
+const HDR11 = ['ID','Nome','Tipo','Data','Hora','Local','Latitude','Longitude',
+               'Precisão (m)','Chave','Anulado'];
 const rec = (id,nome,ts,acc) => ({
   id, userName:nome, type:'entry', timestamp:ts,
   locationName:'Fazenda Exemplo', lat:-19.9167, lon:-43.9345, accuracy:acc,
@@ -158,8 +172,8 @@ const rec = (id,nome,ts,acc) => ({
 console.log('\n【A】 Planilha nova');
 {
   const { sheet, resp } = rodar(null, [rec(1,'Maria','2026-07-31T12:00:00.000Z',12)]);
-  ok(JSON.stringify(sheet._d[CAB-1]) === JSON.stringify(HDR10),
-     'cabeçalho com 10 colunas, na linha ' + CAB, JSON.stringify(sheet._d[CAB-1]));
+  ok(JSON.stringify(sheet._d[CAB-1]) === JSON.stringify(HDR11),
+     'cabeçalho com 11 colunas, na linha ' + CAB, JSON.stringify(sheet._d[CAB-1]));
   ok(sheet._hidden.includes(10), 'coluna Chave (J) oculta', JSON.stringify(sheet._hidden));
   ok(sheet._d[D0][8] === 12, 'precisão gravada na coluna I', sheet._d[D0][8]);
   ok(sheet._d[D0][9] === 'Maria|2026-07-31T12:00:00.000Z', 'chave na coluna J', sheet._d[D0][9]);
@@ -178,8 +192,8 @@ console.log('\n【B】 Planilha de 9 colunas EM USO — a migração não pode p
     rec(1,'Maria','2026-07-30T11:00:00.000Z',15),
     rec(9,'João','2026-07-31T12:30:00.000Z',8),
   ]);
-  ok(JSON.stringify(sheet._d[CAB-1]) === JSON.stringify(HDR10),
-     'cabeçalho migrado para 10 colunas', JSON.stringify(sheet._d[CAB-1]));
+  ok(JSON.stringify(sheet._d[CAB-1]) === JSON.stringify(HDR11),
+     'cabeçalho migrado para 11 colunas', JSON.stringify(sheet._d[CAB-1]));
   ok(sheet._d[D0][9] === 'Maria|2026-07-30T11:00:00.000Z', 'chave antiga preservada em J', sheet._d[D0][9]);
   ok(sheet._d[D0][8] === '', 'precisão vazia nas linhas antigas', JSON.stringify(sheet._d[D0][8]));
   ok(sheet._d[D0][7] === -43.9, 'longitude antiga continua em H', sheet._d[D0][7]);
@@ -193,7 +207,7 @@ console.log('\n【B】 Planilha de 9 colunas EM USO — a migração não pode p
 console.log('\n【B2】 O painel entra acima do cabeçalho sem empurrar nada para fora');
 {
   const atual = [
-    HDR10.slice(),
+    HDR11.slice(),
     [1,'Maria','Entrada','31/07/2026','09:00:00','Fazenda',-19.9,-43.9,12,'Maria|2026-07-31T12:00:00.000Z'],
   ];
   const { sheet } = rodar(novaPlanilha(atual), [rec(2,'Ana','2026-07-31T13:00:00.000Z',20)]);
@@ -211,17 +225,17 @@ console.log('\n【B2】 O painel entra acima do cabeçalho sem empurrar nada par
 console.log('\n【C】 Planilha já migrada — roda de novo sem estragar nada');
 {
   const atual = [
-    ['Mês de referência','julho/2026','','', '','','','','',''],
-    [false,'◀  Calcular horas do mês','','','','','','','',''],
-    [false,'◀  Mover os dados do mês','','','','','','','',''],
-    HDR10.slice(),
+    ['Mês de referência','julho/2026','','', '','','','','','',''],
+    [false,'◀  Calcular horas do mês','','','','','','','','',''],
+    [false,'◀  Mover os dados do mês','','','','','','','','',''],
+    HDR11.slice(),
     [1,'Maria','Entrada','31/07/2026','09:00:00','Fazenda',-19.9,-43.9,12,'Maria|2026-07-31T12:00:00.000Z'],
   ];
   const { sheet, resp } = rodar(novaPlanilha(atual), [
     rec(1,'Maria','2026-07-31T12:00:00.000Z',12),
     rec(2,'Ana','2026-07-31T13:00:00.000Z',20),
   ]);
-  ok(JSON.stringify(sheet._d[CAB-1]) === JSON.stringify(HDR10), 'cabeçalho intacto',
+  ok(JSON.stringify(sheet._d[CAB-1]) === JSON.stringify(HDR11), 'cabeçalho intacto',
      JSON.stringify(sheet._d[CAB-1]));
   ok(sheet._d.length === CAB + 2, 'nenhuma linha de painel foi inserida de novo',
      sheet._d.length - CAB);
@@ -264,7 +278,7 @@ console.log('\n【F】 Abrir a planilha já desenha o painel');
   // Foi o furo relatado: colar o código e recarregar mostrava o menu e mais
   // nada. O painel só nascia no primeiro clique de um item do menu.
   const atual = [
-    HDR10.slice(),
+    HDR11.slice(),
     [1,'Maria','Entrada','31/07/2026','09:00:00','Fazenda',-19.9,-43.9,12,'Maria|2026-07-31T12:00:00.000Z'],
   ];
   const sheet = abrir(novaPlanilha(atual));
@@ -276,6 +290,30 @@ console.log('\n【F】 Abrir a planilha já desenha o painel');
      'a D1 avisa que falta armar as caixinhas', String(sheet._d[0][3]));
   ok(sheet._d[D0][9] === 'Maria|2026-07-31T12:00:00.000Z',
      'e a linha da Maria desceu inteira', sheet._d[D0][9]);
+}
+
+console.log('\n【G】 Anular tira do cálculo sem tirar da planilha');
+{
+  const atual = [
+    HDR11.slice(),
+    [1,'Maria','Entrada','31/07/2026','07:00:00','Fazenda',-19.9,-43.9,12,'Maria|2026-07-31T10:00:00.000Z',false],
+    [2,'Maria','Saída',  '31/07/2026','19:00:00','Fazenda',-19.9,-43.9,12,'Maria|2026-07-31T22:00:00.000Z',true],
+  ];
+  const { ss, ctx } = rodar(novaPlanilha(atual), null);
+  ctx.onOpen();                                   // desce o cabeçalho para a linha 4
+  const sheet = ss._s;
+
+  const marc = ctx.lerMarcacoes_(sheet, D0 + 1);
+  ok(marc.length === 1, 'a linha anulada não é lida', String(marc.length));
+  ok(marc[0].tipo === 'entry', 'e a que sobrou é a entrada', marc[0].tipo);
+  ok(sheet._d.length === CAB + 2, 'as duas linhas continuam na planilha',
+     'linhas de dados: ' + (sheet._d.length - CAB));
+
+  // Um "x" digitado vale tanto quanto a caixinha marcada.
+  ok(ctx.anulado_('x') && ctx.anulado_(' X ') && ctx.anulado_(true),
+     'x, X e a caixinha marcada contam como anulado');
+  ok(!ctx.anulado_('') && !ctx.anulado_(false) && !ctx.anulado_(null),
+     'vazio e desmarcado, não');
 }
 
 console.log('\n' + (falhas ? `❌ ${falhas} falha(s)` : '✅ todos os testes passaram'));

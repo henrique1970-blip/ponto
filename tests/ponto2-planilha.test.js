@@ -27,7 +27,7 @@ function novaAba(nome, grid) {
     getLastRow(){ return this._d.length; },
     getLastColumn(){ return this._d.reduce((m,r)=>Math.max(m,r.length),0); },
     getMaxRows(){ return Math.max(this._d.length, 1000); },
-    getMaxColumns(){ return Math.max(this.getLastColumn(), 16); },
+    getMaxColumns(){ return Math.max(this.getLastColumn(), 17); },
     setFrozenRows(n){ this._frozen = n; return this; },
     setFrozenColumns(){ return this; },
     setColumnWidth(){ return this; },
@@ -104,13 +104,16 @@ function contexto(ss) {
       getActiveSpreadsheet: () => ss,
       getActive: () => ss,
       flush: () => {},
-      newDataValidation: () => ({
-        requireValueInList(){ return this; }, setAllowInvalid(){ return this; },
-        build(){ return { lista: true }; },
-      }),
+      newDataValidation: () => {
+        const b = { requireValueInList(){ return b; }, requireCheckbox(){ return b; },
+                    setAllowInvalid(){ return b; }, build(){ return { lista: true }; } };
+        return b;
+      },
       newConditionalFormatRule: () => {
-        const b = { whenFormulaSatisfied(){ return b; }, setBackground(){ return b; },
-                    setRanges(){ return b; }, build(){ return {}; } };
+        const b = { whenFormulaSatisfied(f){ b._f = f; return b; }, setBackground(){ return b; },
+                    setFontColor(){ return b; }, setStrikethrough(){ return b; },
+                    setRanges(){ return b; },
+                    build(){ return { getBooleanCondition: () => ({ getCriteriaValues: () => [b._f] }) }; } };
         return b;
       },
       getUi(){
@@ -153,12 +156,12 @@ const ok = (c, nome, extra='') => {
 };
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
-const COLS16 = ['ID','Nome','Tipo','Data','Hora','Local','Confirmacao','Latitude',
+const COLS17 = ['ID','Nome','Tipo','Data','Hora','Local','Confirmacao','Latitude',
                 'Longitude','Chave','Foto','Distancia','Margem','Rigor',
-                'Conferido','Vivacidade'];
+                'Conferido','Vivacidade','Anulado'];
 
 function linha(id, nome, tipo, dia, hora, foto) {
-  const l = new Array(16).fill('');
+  const l = new Array(17).fill('');
   l[0] = id; l[1] = nome; l[2] = tipo;
   l[3] = dia.slice(8) + '/' + dia.slice(5,7) + '/' + dia.slice(0,4);
   l[4] = hora + ':00';
@@ -171,7 +174,7 @@ function linha(id, nome, tipo, dia, hora, foto) {
 console.log('\n【1】 Só existe a "Saidas" antiga — ela vira "Registros"');
 {
   const velha = novaAba('Saidas', [
-    COLS16.slice(),
+    COLS17.slice(),
     linha(1, 'Maria', 'Entrada', '2026-08-03', '07:00'),
     linha(2, 'Maria', 'Saída',   '2026-08-03', '16:00'),
   ]);
@@ -184,7 +187,7 @@ console.log('\n【1】 Só existe a "Saidas" antiga — ela vira "Registros"');
      ss.getSheets().map(s=>s.getName()).join(', '));
   ok(ss.getSheets().length === 1, 'e nenhuma "Saidas" nova foi criada',
      ss.getSheets().map(s=>s.getName()).join(', '));
-  ok(JSON.stringify(reg._d[CAB-1]) === JSON.stringify(COLS16),
+  ok(JSON.stringify(reg._d[CAB-1]) === JSON.stringify(COLS17),
      'o cabeçalho desceu para a linha ' + CAB);
   ok(reg._d[D0][9] === 'Maria|2026-08-03T07:00:00-03:00',
      'e os registros desceram junto, com a chave', reg._d[D0][9]);
@@ -196,11 +199,11 @@ console.log('\n【2】 As duas abas existindo — foi o que aconteceu ao renomea
   // "Registros" é a original renomeada na unha (cabeçalho ainda na linha 1);
   // "Saidas" é a que o código recriou depois, com o último registro só.
   const reg = novaAba('Registros', [
-    COLS16.slice(),
+    COLS17.slice(),
     linha(1, 'Maria', 'Entrada', '2026-08-03', '07:00'),
   ]);
   const perdida = novaAba('Saidas', [
-    COLS16.slice(),
+    COLS17.slice(),
     linha(2, 'Maria', 'Saída', '2026-08-03', '16:00'),
   ]);
   const ss = novaPlanilha([reg, perdida]);
@@ -221,13 +224,13 @@ console.log('\n【2】 As duas abas existindo — foi o que aconteceu ao renomea
 console.log('\n【3】 Mover dados — copia, confere, e só então apaga');
 {
   const reg = novaAba('Registros', [
-    ['Mês de referência','agosto/2026','','','','','','','','','','','','','',''],
-    [false,'◀  Calcular horas do mês','','','','','','','','','','','','','',''],
-    [false,'◀  Mover os dados do mês','','','','','','','','','','','','','',''],
-    COLS16.slice(),
+    ['Mês de referência','agosto/2026','','','','','','','','','','','','','','',''],
+    [false,'◀  Calcular horas do mês','','','','','','','','','','','','','','',''],
+    [false,'◀  Mover os dados do mês','','','','','','','','','','','','','','',''],
+    COLS17.slice(),
     linha(1, 'Zeca',  'Entrada', '2026-08-03', '07:00', '=IMAGE("http://x/1")'),
     linha(2, 'Ana',   'Entrada', '2026-08-03', '07:05'),
-    new Array(16).fill(''),                                   // linha em branco
+    new Array(17).fill(''),                                   // linha em branco
     linha(3, 'Zeca',  'Saída',   '2026-08-03', '16:00'),
     linha(4, 'Ana',   'Saída',   '2026-08-03', '16:10'),
     linha(5, 'Ana',   'Entrada', '2026-09-01', '07:00'),      // outro mês: fica
@@ -259,10 +262,10 @@ console.log('\n【3】 Mover dados — copia, confere, e só então apaga');
 console.log('\n【4】 Calcular horas — a aba do mês nasce com uma linha por jornada');
 {
   const reg = novaAba('Registros', [
-    ['Mês de referência','agosto/2026','','','','','','','','','','','','','',''],
-    [false,'','','','','','','','','','','','','','',''],
-    [false,'','','','','','','','','','','','','','',''],
-    COLS16.slice(),
+    ['Mês de referência','agosto/2026','','','','','','','','','','','','','','',''],
+    [false,'','','','','','','','','','','','','','','',''],
+    [false,'','','','','','','','','','','','','','','',''],
+    COLS17.slice(),
     linha(1, 'Zeca', 'Entrada', '2026-08-03', '07:00'),
     linha(2, 'Zeca', 'Saída',   '2026-08-03', '11:30'),
     linha(3, 'Zeca', 'Entrada', '2026-08-03', '12:30'),
@@ -289,10 +292,10 @@ console.log('\n【4】 Calcular horas — a aba do mês nasce com uma linha por 
 console.log('\n【5】 Mês sem registro — avisa e não cria aba nenhuma');
 {
   const reg = novaAba('Registros', [
-    ['Mês de referência','janeiro/2026','','','','','','','','','','','','','',''],
-    [false,'','','','','','','','','','','','','','',''],
-    [false,'','','','','','','','','','','','','','',''],
-    COLS16.slice(),
+    ['Mês de referência','janeiro/2026','','','','','','','','','','','','','','',''],
+    [false,'','','','','','','','','','','','','','','',''],
+    [false,'','','','','','','','','','','','','','','',''],
+    COLS17.slice(),
     linha(1, 'Zeca', 'Entrada', '2026-08-03', '07:00'),
   ]);
   const ss = novaPlanilha([reg]);
@@ -312,7 +315,7 @@ console.log('\n【6】 Abrir a planilha já desenha o painel');
   // Foi o furo relatado: colar o código e recarregar mostrava o menu e mais
   // nada. O painel só nascia no primeiro clique de um item do menu.
   const velha = novaAba('Saidas', [
-    COLS16.slice(),
+    COLS17.slice(),
     linha(1, 'Maria', 'Entrada', '2026-08-03', '07:00'),
   ]);
   const ss = novaPlanilha([velha]);
@@ -338,6 +341,38 @@ console.log('\n【6】 Abrir a planilha já desenha o painel');
      'linhas: ' + reg._d.length);
   ok(reg._d[0][3] === 'resultado da última ação',
      'e não apaga a resposta da última ação', String(reg._d[0][3]));
+}
+
+console.log('\n【7】 Anular tira do cálculo sem tirar da planilha');
+{
+  // O caso real: entradas batidas por engano no fim do dia. Elas não podem
+  // sumir da aba — são a prova de que alguém encostou no aparelho — mas não
+  // podem contar hora nenhuma.
+  const reg = novaAba('Registros', [
+    ['Mês de referência','agosto/2026','','','','','','','','','','','','','','',''],
+    [false,'','','','','','','','','','','','','','','',''],
+    [false,'','','','','','','','','','','','','','','',''],
+    COLS17.slice(),
+    linha(1, 'Zeca', 'Entrada', '2026-08-03', '07:00'),
+    linha(2, 'Zeca', 'Saída',   '2026-08-03', '16:00'),
+    linha(3, 'Zeca', 'Entrada', '2026-08-03', '19:30'),   // engano do fim do dia
+  ]);
+  reg._d[6][16] = true;                                   // ← anulada à mão
+  const ss = novaPlanilha([reg]);
+  const ctx = contexto(ss);
+  ctx.calcularHoras();
+
+  const calc = ss.getSheetByName('agosto_calculos');
+  ok(calc._d.length === 2, 'sobra uma jornada só, sem a entrada anulada',
+     'linhas: ' + calc._d.length);
+  const iObs = calc._d[0].indexOf('Observação');
+  ok(!String(calc._d[1][iObs]).includes('jornada aberta'),
+     'e nenhuma jornada fica aberta por causa dela', String(calc._d[1][iObs]));
+  const iTotal = calc._d[0].indexOf('Total de horas');
+  ok(Math.round(calc._d[1][iTotal] * 1440) === 540, '9h, como se ela não existisse',
+     String(Math.round(calc._d[1][iTotal] * 1440)) + ' min');
+  ok(reg._d.length === CAB + 3, 'as três linhas continuam na aba de registros',
+     'linhas de dados: ' + (reg._d.length - CAB));
 }
 
 console.log('\n' + (falhas ? `❌ ${falhas} falha(s)` : '✅ todos os testes passaram'));

@@ -373,6 +373,50 @@ enxerga as duas pontas.
 > escolhido **não** for do ano corrente, o ano entra junto
 > (`agosto_2025_calculos`) — dois agostos não podem cair na mesma aba.
 
+## Anular um registro errado
+
+Ponto batido por engano — o aparelho na mão de quem estava testando, a entrada
+que ninguém quis bater às 19:30 — se resolve **marcando a coluna `Anulado`**, a
+última da aba `Registros`. A linha continua ali, cinza e riscada, e o cálculo
+passa a ignorá-la.
+
+Marque a caixinha, ou digite `x` na célula — as duas contam. Para várias de uma
+vez: selecione as linhas e use **menu Ponto → Anular linhas selecionadas**
+(`Reativar linhas selecionadas` desfaz). Depois **recalcule o mês**, senão a aba
+de cálculo continua mostrando o número velho.
+
+### Por que marcar em vez de apagar
+
+Duas razões, e a segunda é provavelmente a que já mordeu você:
+
+1. **O registro bruto é a prova.** Folha de ponto que perde linha perde o valor
+   de prova. O que se quer dizer é "este não conta" — não "este nunca existiu".
+2. **A coluna `Chave` é o que impede o celular de reenviar o mesmo ponto.**
+   Apagada a linha, o aparelho que ainda tiver aquele registro pendente manda
+   de volta, e ele **reaparece**. É por isso que apagar à mão costuma parecer
+   que "não deu certo".
+
+### ⚠️ Anular na planilha NÃO destrava o aparelho
+
+São duas memórias separadas, e essa é a parte que engana:
+
+| Onde | Para que serve |
+|---|---|
+| A **planilha** | é a folha: o que vira hora e dinheiro |
+| O **IndexedDB do celular** | é quem decide se a próxima marcação da pessoa é entrada ou saída, e quem conta a trava de 12h |
+
+O app **nunca lê a planilha**. Anular uma entrada lá não faz o aparelho voltar a
+oferecer *Entrada* para aquela pessoa — ele continua achando que ela está com
+uma jornada aberta.
+
+Para limpar o lado do aparelho, **naquele celular**: `Admin → 🧪 Apagar
+registros locais (teste)`. Ele apaga o histórico **daquele aparelho**, libera a
+trava e faz a próxima marcação voltar a ser *Entrada*.
+
+> Antes de usar, confira que **não há pendências de envio** (o contador de
+> pendentes tem que estar em zero). O que ainda não subiu para a planilha se
+> perde — e é justamente o que ainda não tem cópia em lugar nenhum.
+
 ## A aba do mês — horas calculadas
 
 A `Registros` continua sendo o registro bruto e auditável — uma linha por

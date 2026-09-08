@@ -30,19 +30,20 @@ const ABA_ANTIGA  = 'Saidas';
 //
 // Abrir a /exec no navegador passa a mostrar este texto. Suba o numero sempre
 // que mexer em algo que a /exec faz.
-const VERSAO = 'v3 - Aba Registros, painel de botoes, calculo por mes';
+const VERSAO = 'v4 - Aba Registros, painel, calculo por mes, coluna Anulado';
 
 // A 'Chave' precisa continuar na coluna 10: linhas antigas já foram gravadas com
 // ela ali, e é por ela que a deduplicação reconhece um reenvio. Colunas novas
 // entram DEPOIS dela.
 const COLS  = ['ID','Nome','Tipo','Data','Hora','Local','Confirmacao',
                'Latitude','Longitude','Chave','Foto','Distancia','Margem','Rigor',
-               'Conferido','Vivacidade'];
+               'Conferido','Vivacidade','Anulado'];
 const CHAVE = 10;   // coluna da chave de deduplicação (A=1 … J=10)
 const FOTO  = 11;   // coluna da miniatura
 const DIST  = 12;   // coluna da distância do reconhecimento
 const CONF  = 15;   // coluna da caixinha "conferido"
 const VIVO  = 16;   // como a vivacidade foi provada — 'nao confirmada' pede atenção
+const ANULADO = 17; // marcada, a linha sai do cálculo sem sair da planilha
 
 // Acima desta distância o reconhecimento passou "raspando" — não está errado,
 // mas é onde o erro mora. A planilha destaca essas linhas para conferência.
@@ -99,7 +100,8 @@ function doPost(e) {
         r.margem != null ? r.margem : '',
         r.rigor  || '',
         false,                             // Conferido — caixinha desmarcada
-        r.vivacidade || ''                 // piscada/boca/movimento ou 'nao confirmada'
+        r.vivacidade || '',                // piscada/boca/movimento ou 'nao confirmada'
+        false                              // Anulado — só a mão de alguém marca
       ]);
     });
 
@@ -108,6 +110,7 @@ function doPost(e) {
       sheet.getRange(inicio, 1, linhas.length, COLS.length).setValues(linhas);
       sheet.setRowHeights(inicio, linhas.length, ALTURA_LINHA);
       sheet.getRange(inicio, CONF, linhas.length, 1).insertCheckboxes();
+      sheet.getRange(inicio, ANULADO, linhas.length, 1).setDataValidation(caixa_());
     }
 
     return json_({ ok: true, saved: linhas.length, ignorados: records.length - linhas.length });
@@ -171,6 +174,9 @@ function onOpen() {
     .addSeparator()
     .addItem('Calcular horas do mês', 'calcularHoras')
     .addItem('Mover dados do mês', 'moverDados')
+    .addSeparator()
+    .addItem('Anular linhas selecionadas', 'anularSelecao')
+    .addItem('Reativar linhas selecionadas', 'reativarSelecao')
     .addSeparator()
     .addItem('Destacar registros a conferir', 'formatarPlanilha')
     .addItem('Quantos faltam conferir?', 'resumoConferencia')
@@ -602,6 +608,7 @@ function prepararPlanilha_() {
 
   const sheet = getSheet_();
   montarPainel_(sheet);
+  formatarAnulados_(sheet);
   lerFeriados_(ss);
   status_(sheet, 'Painel pronto. Escolha o mês em B1 e marque a caixinha da ação.');
 }
@@ -796,6 +803,7 @@ function lerMarcacoes_(sheet, primeiraLinha) {
     const chave = String(r[CHAVE - 1] || '');
     const corte = chave.lastIndexOf('|');
     if (corte < 0) return;                       // linha sem chave: ignora
+    if (anulado_(r[ANULADO - 1])) return;        // linha anulada: fora do cálculo
 
     const quando = new Date(chave.substring(corte + 1));
     if (isNaN(quando.getTime())) return;
@@ -1199,4 +1207,94 @@ function comAviso_(nome, fn) {
     try { status_(SpreadsheetApp.getActive().getSheetByName(ABA), msg); } catch (_) {}
     throw err;
   }
+}
+
+// ─── ANULAR REGISTRO ─────────────────────────────────────────────────────────
+// Anular é MARCAR, não apagar. Duas razões, as duas com consequência real:
+//
+//   • O registro bruto é a prova de quem bateu o quê e quando. Folha de ponto
+//     que perde linha perde o valor de prova — o que se quer é dizer "este não
+//     conta", e continuar podendo mostrar que ele existiu e foi anulado.
+//
+//   • A coluna Chave é o que impede o celular de reenviar o mesmo ponto. Apagada
+//     a linha, o aparelho que ainda tiver aquele registro pendente manda de novo
+//     e ele REAPARECE. É por isso que apagar à mão costuma "não dar certo".
+//
+// Linha anulada some do cálculo (lerMarcacoes_ a ignora) e fica cinza e riscada
+// na aba. Reativar desfaz.
+function anularSelecao()   { comAviso_('Anular seleção',   function () { marcarSelecao_(true);  }); }
+function reativarSelecao() { comAviso_('Reativar seleção', function () { marcarSelecao_(false); }); }
+
+function marcarSelecao_(valor) {
+  const ss    = SpreadsheetApp.getActive();
+  const alvo  = ss.getSheetByName(ABA);
+  const sheet = ss.getActiveSheet();
+
+  if (!sheet || sheet.getName() !== ABA) {
+    status_(alvo, 'Selecione as linhas na aba "' + ABA + '" e rode de novo.');
+    return;
+  }
+
+  let total = 0;
+  ss.getActiveRangeList().getRanges().forEach(function (sel) {
+    // O painel não é registro: a seleção que o pega por cima é aparada aqui.
+    const ini = Math.max(sel.getRow(), LIN_DADOS);
+    const fim = Math.min(sel.getLastRow(), sheet.getLastRow());
+    if (fim < ini) return;
+
+    const faixa = sheet.getRange(ini, ANULADO, fim - ini + 1, 1);
+    faixa.setDataValidation(caixa_());
+    faixa.setValue(valor);
+    total += fim - ini + 1;
+  });
+
+  if (!total) {
+    status_(sheet, 'Nenhuma linha de registro na seleção — selecione a partir da ' +
+                   'linha ' + LIN_DADOS + '.');
+    return;
+  }
+  status_(sheet, total + ' linha(s) ' + (valor ? 'anulada(s)' : 'reativada(s)') +
+          '. Recalcule o mês para o efeito aparecer nas horas.');
+}
+
+// Caixinha por validação, e não por insertCheckboxes: aquele método ZERA o valor
+// de todas as células da faixa. Aplicado numa coluna que já tem anulações, ele
+// desanularia tudo em silêncio.
+function caixa_() {
+  return SpreadsheetApp.newDataValidation().requireCheckbox().build();
+}
+
+// Aceita a caixinha marcada e também um "x" digitado: quem corrige a planilha com
+// pressa digita, não procura a caixinha.
+function anulado_(v) {
+  if (v === true) return true;
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  return s === 'x' || s === 'sim' || s === 'true' || s === 'anulado';
+}
+
+// Linha anulada tem que saltar aos olhos: cinza e riscada. Ela continua ali —
+// é a diferença entre corrigir e sumir com a prova.
+function formatarAnulados_(sheet) {
+  const col   = colLetra_(ANULADO);
+  const faixa = sheet.getRange(LIN_DADOS, 1,
+                              Math.max(1, sheet.getMaxRows() - LIN_CAB), COLS.length);
+
+  const regra = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied('=$' + col + LIN_DADOS + '=TRUE')
+    .setBackground('#F1F5F9')
+    .setFontColor('#94A3B8')
+    .setStrikethrough(true)
+    .setRanges([faixa])
+    .build();
+
+  // Substitui só a nossa regra, se formatarAnulados_ rodar duas vezes.
+  const outras = sheet.getConditionalFormatRules().filter(function (r) {
+    const b = r.getBooleanCondition();
+    const v = b && b.getCriteriaValues()[0];
+    return !(typeof v === 'string' && v.indexOf('$' + col) >= 0);
+  });
+  sheet.setConditionalFormatRules(outras.concat([regra]));
+
+  const n = sheet.getLastRow() - LIN_CAB;
+  if (n > 0) sheet.getRange(LIN_DADOS, ANULADO, n, 1).setDataValidation(caixa_());
 }
