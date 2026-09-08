@@ -15,7 +15,9 @@
 // v10: todo mundo passa a registrar entrada e saída; a marca por funcionário
 //      deixou de existir. O app não é mais só de saída.
 // v11: botão de instalar no cabeçalho e card de instalação no Admin.
-const CACHE = 'ponto-saida-v11';
+// v12: a jornada passou a admitir intervalo (almoço/café) — a trava longa
+//      não vale na volta de uma pausa curta.
+const CACHE = 'ponto-saida-v12';
 
 // Mesma origem — precisa funcionar para o app abrir offline.
 const CORE = [

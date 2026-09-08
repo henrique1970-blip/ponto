@@ -368,12 +368,44 @@ nasce vazia — preencha se quiser.
 > menu roda sempre o código salvo no editor. Basta colar o `apps-script.gs`
 > novo e recarregar a planilha.
 
+## Intervalo dentro da jornada
+
+Sair e voltar dentro da **pausa máxima** (padrão **4h**) é *intervalo* — almoço,
+café — e não abre jornada nova. Na volta, a trava de 12h não se aplica: vale só
+o intervalo curto (5 min), que segue barrando o toque duplo na tela de sucesso.
+
+Sem isso, quem saísse para o almoço às 11:30 só voltaria a bater às 23:30, e a
+coluna `E2` da aba `Jornadas` nunca encheria. Foi essa trava que motivou a
+mudança.
+
+Passada a pausa máxima, voltar é começar **outra jornada**, e a trava de 12h
+volta a valer. Quem está marcado como **plantão** não tem esse limite: para
+quem faz ronda, a volta pode demorar mais que a pausa e ainda ser o mesmo turno.
+
+| Situação (funcionário comum) | Volta |
+|---|---|
+| Saiu 11:30, volta 12:30 (1h) | **liberada** — intervalo |
+| Saiu 09:00, volta 15:00 (6h) | **travada 12h** — jornada nova |
+| Saiu 09:00, volta 09:02 | **travada 5 min** — toque duplo |
+
+Ajustável em **Admin → Configurações → Pausa máxima que continua a mesma
+jornada (horas)**. Use **0** para não permitir intervalo — volta o
+comportamento anterior.
+
+> ⚠️ **Esse número tem que ser igual ao `PAUSA_MAX_H` do `apps-script.gs`.** É
+> o mesmo limite dos dois lados: o app decide se aceita a volta, a planilha
+> decide se agrupa na mesma jornada. Se a planilha usar um limite menor, ela
+> parte em duas o que o app registrou como uma.
+
 ## Trava de 12 horas
 
 A trava separa uma jornada da seguinte: conta a partir da **última saída** e
 segura a **próxima entrada**. Enquanto estiver travado, o app mostra o nome e
 `Saída já registrada às HH:MM · libera em 11h56` — o botão de confirmar nem
 aparece. Entre a entrada e a sua saída vale o intervalo curto (5 min).
+
+Ela **não vale na volta de um intervalo** — veja a seção acima. Almoçar não
+começa jornada nova.
 
 A regra é verificada em **dois pontos**: ao reconhecer o rosto (não abre a
 confirmação) e de novo **imediatamente antes de gravar** — ou seja, ela não

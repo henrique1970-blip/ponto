@@ -3,9 +3,10 @@
 // câmera, sem face-api: só a decisão "o que esta pessoa registra agora".
 //
 // É a peça de risco da mudança. O app registra ENTRADA E SAÍDA para todo mundo:
-// a primeira marcação da jornada é a entrada, a seguinte é a saída. Quem está
-// marcado com `plantao` no cadastro pode repetir isso várias vezes no mesmo
-// dia. Errar aqui é gravar o tipo errado na planilha da folha.
+// a primeira marcação da jornada é a entrada, a seguinte é a saída. A jornada
+// admite INTERVALOS — sair e voltar dentro de `pausaMax` é almoço/café, não
+// jornada nova. Quem está marcado com `plantao` vai e volta sem esse limite.
+// Errar aqui é gravar o tipo errado na planilha da folha.
 const fs   = require('fs');
 const vm   = require('vm');
 const path = require('path');
@@ -28,6 +29,7 @@ let punches  = [];
 let minHours = 12;
 let jornadaH = 16;
 let minEntre = 5;
+let pausaMax = 4;
 
 // Relógio simulado. `NOW = null` usa a hora real — é assim que roda a maior
 // parte do arquivo; os testes que dependem do dia civil cravam um instante.
@@ -41,6 +43,7 @@ const ctx = vm.createContext({
   get minHours(){ return minHours; },
   get jornadaH(){ return jornadaH; },
   get minEntre(){ return minEntre; },
+  get pausaMax(){ return pausaMax; },
   dbAll: async () => punches,
   Date: FakeDate, console,
 });
@@ -86,7 +89,16 @@ const marca = (type, ms, quem = PESSOA.name) => reg(quem, type, new Date(ms).toI
 
   punches = [reg(PESSOA.name, 'entry', h(9)), reg(PESSOA.name, 'exit', h(1))];
   p = await plano(PESSOA);
-  ok(p.type === 'entry' && !!p.block, 'jornada fechada há 1h → Entrada, travada (12h)');
+  ok(p.type === 'entry' && !p.block,
+     'saída há 1h → Entrada liberada: é volta de intervalo, não jornada nova');
+
+  // Passada a pausa máxima, dentro do mesmo dia, aí sim é jornada nova.
+  em(dia(8, 15, 0));
+  punches = [marca('entry', dia(8, 6, 0)), marca('exit', dia(8, 9, 0))];
+  p = await plano(PESSOA);
+  ok(p.type === 'entry' && !!p.block,
+     'saída 09:00 e volta 15:00 (6h) → jornada nova, travada pelas 12h');
+  NOW = null;
 
   punches = [reg(PESSOA.name, 'entry', h(21)), reg(PESSOA.name, 'exit', h(13))];
   p = await plano(PESSOA);
@@ -107,10 +119,10 @@ const marca = (type, ms, quem = PESSOA.name) => reg(quem, type, new Date(ms).toI
   ok(p.type === 'entry' && !p.block, 'histórico só de saídas → a próxima é Entrada');
 
   // E a trava de 12h continua fazendo o seu papel dentro do dia.
-  punches = [marca('exit', dia(8, 8, 0))];
+  punches = [marca('exit', dia(8, 2, 0))];
   p = await plano(PESSOA);
   ok(p.type === 'entry' && !!p.block,
-     'mas a saída de hoje às 08:00 ainda trava a entrada às 10:00');
+     'mas a saída de hoje às 02:00 ainda trava a entrada às 10:00 (8h > pausa)');
   NOW = null;
 
   console.log('\n【3】 Turno noturno — entra 23:00, sai 04:00 do dia seguinte');
@@ -141,7 +153,7 @@ const marca = (type, ms, quem = PESSOA.name) => reg(quem, type, new Date(ms).toI
   ok(p.type === 'entry' && !p.block, 'o histórico de outra pessoa não interfere');
 
   em(dia(8, 10, 0));
-  punches  = [marca('exit', dia(8, 9, 59))];
+  punches  = [marca('exit', dia(8, 3, 0))];      // 7h: pausa longa, cai na trava longa
   minHours = 0;                                  // trava desligada
   p = await plano(PESSOA);
   ok(p.type === 'entry' && !p.block, 'minHours = 0 desliga a trava longa');
@@ -181,7 +193,7 @@ const marca = (type, ms, quem = PESSOA.name) => reg(quem, type, new Date(ms).toI
   em(dia(7, 23, 52));
   p = await plano(PESSOA);
   ok(p.type === 'entry' && !!p.block,
-     'reabrir 2min depois, no MESMO dia → travado pelas 12h');
+     'reabrir 2min depois → travado pelo intervalo curto');
 
   // E a virada não pode virar atalho para o toque duplo: o intervalo curto
   // continua separando a saída da reabertura.
@@ -232,18 +244,62 @@ const marca = (type, ms, quem = PESSOA.name) => reg(quem, type, new Date(ms).toI
   p = await plano(PLANTAO);
   ok(p.type === 'entry' && !!p.block, 'voltar 2min depois ainda é travado pelo intervalo curto');
 
-  // E quem NÃO é plantão continua com uma jornada por dia.
+  // Sem plantão, a volta rápida também passa — é intervalo. O que separa os
+  // dois casos deixou de ser a marca no cadastro e passou a ser a DURAÇÃO da
+  // pausa: acima de `pausaMax`, só o plantão continua.
   punches = [marca('entry', dia(7, 19, 0)), marca('exit', dia(7, 21, 30))];
   em(dia(7, 22, 40));
   p = await plano(PESSOA);
+  ok(p.type === 'entry' && !p.block, 'sem plantão: voltar 1h10 depois é intervalo, e passa');
+
+  punches = [marca('entry', dia(7, 6, 0)), marca('exit', dia(7, 9, 0))];
+  em(dia(7, 15, 0));                              // 6h de pausa, mesmo dia
+  p = await plano(PESSOA);
   ok(p.type === 'entry' && !!p.block,
-     'sem plantão: a volta no mesmo dia continua travada 12h');
+     'comum: pausa de 6h no mesmo dia → travado, é jornada nova');
+
+  punches = [marca('entry', dia(7, 6, 0), PLANTAO.name),
+             marca('exit',  dia(7, 9, 0), PLANTAO.name)];
+  p = await plano(PLANTAO);
+  ok(p.type === 'entry' && !p.block, 'plantão: a mesma pausa de 6h passa');
 
   // Plantão não depende de mais nenhuma marca no cadastro para funcionar.
   punches = [];
   em(dia(7, 19, 0));
   p = await plano({ name: 'Fantasma', plantao: true });
   ok(p.type === 'entry', 'plantão sozinho no cadastro já alterna normalmente');
+
+  console.log('\n【8】 Intervalo dentro da jornada — almoço e café');
+  // O caso que fez a regra mudar: sem isto, quem saísse para o almoço só
+  // voltaria a bater 12h depois, e a coluna E2 da planilha nunca encheria.
+  em(dia(8, 12, 30));
+  punches = [marca('entry', dia(8, 7, 0)), marca('exit', dia(8, 11, 30))];
+  p = await plano(PESSOA);
+  ok(p.type === 'entry' && !p.block, 'volta do almoço (1h) → Entrada liberada');
+
+  punches.push(marca('entry', dia(8, 12, 30)));
+  em(dia(8, 17, 0));
+  p = await plano(PESSOA);
+  ok(p.type === 'exit' && !p.block, 'e a saída das 17:00 fecha o segundo par');
+
+  // Café de 15 min também é intervalo — mas o toque duplo continua barrado.
+  punches = [marca('entry', dia(8, 7, 0)), marca('exit', dia(8, 9, 0))];
+  em(dia(8, 9, 2));
+  p = await plano(PESSOA);
+  ok(p.type === 'entry' && !!p.block, 'voltar 2min do café → travado pelo intervalo curto');
+
+  em(dia(8, 9, 15));
+  p = await plano(PESSOA);
+  ok(p.type === 'entry' && !p.block, 'passados 15min, a volta do café passa');
+
+  // Desligar a pausa devolve o comportamento anterior, para quem não quiser
+  // intervalo registrado.
+  pausaMax = 0;
+  em(dia(8, 12, 30));
+  punches = [marca('entry', dia(8, 7, 0)), marca('exit', dia(8, 11, 30))];
+  p = await plano(PESSOA);
+  ok(p.type === 'entry' && !!p.block, 'pausaMax = 0 volta a barrar a volta do almoço');
+  pausaMax = 4;
 
   NOW = null;
 

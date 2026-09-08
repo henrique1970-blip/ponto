@@ -280,7 +280,8 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         <input id="cfgMinH" type="number" min="0" max="24" step="1" placeholder="12">
       </div>
       <p class="hint">É o intervalo entre uma jornada e a seguinte, contado da última
-        saída — e vale <b>dentro do mesmo dia</b>.
+        saída — e vale <b>dentro do mesmo dia</b>. Não vale na volta de um
+        <b>intervalo</b> (veja a pausa máxima abaixo): almoçar não começa jornada nova.
         Virando o dia, a pessoa pode reabrir na hora: é o que permite
         <b>cortar a jornada na meia-noite</b> (saída 23:50, entrada 00:05) sem perder a
         noite. Nesse caso vale só o intervalo curto abaixo.
@@ -305,6 +306,17 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         da câmera — sem esse prazo, o 👍 seguinte fecharia a jornada recém-aberta.
         É também o que separa a saída da reabertura no corte de meia-noite.
         Padrão: <b>5 min</b>.</p>
+
+      <div class="field">
+        <label>Pausa máxima que continua a mesma jornada (horas)</label>
+        <input id="cfgPausa" type="number" min="0" max="12" step="1" placeholder="4">
+      </div>
+      <p class="hint">Almoço, café, ronda: sair e voltar dentro desse prazo é
+        <b>intervalo</b>, não jornada nova — a trava longa acima não se aplica na volta.
+        Passado o prazo, voltar é começar outra jornada e a trava vale.
+        <b>Use o mesmo número no <code>PAUSA_MAX_H</code> do Apps Script</b>, senão a
+        planilha separa em duas jornadas um intervalo que o app aceitou.
+        Padrão: <b>4h</b>. Use <b>0</b> para não permitir intervalo.</p>
       <div class="field">
         <label>Rigor do reconhecimento facial</label>
         <select id="cfgRigor">
@@ -512,6 +524,7 @@ const DONE_DURATION   =  3200;  // tempo da tela de sucesso
 const DEFAULT_MIN_H   =    12;  // intervalo mínimo entre saídas do mesmo funcionário (horas)
 const DEFAULT_JORNADA_H =  16;  // prazo em que uma entrada em aberto ainda vira saída
 const DEFAULT_MIN_ENTRE =   5;  // intervalo mínimo entre a entrada e a sua saída (minutos)
+const DEFAULT_PAUSA_H   =   4;  // pausa que ainda é a MESMA jornada (almoço, café, ronda)
 const THUMB_SCORE     =  0.62;  // confiança mínima do gesto
 const THUMB_FRAMES    =     4;  // leituras consecutivas exigidas (anti-falso-positivo)
 const GESTURE_INTERVAL=   100;  // ms entre inferências de gesto (~10 fps)
@@ -664,6 +677,7 @@ let wakeWanted   = true;
 let minHours     = DEFAULT_MIN_H;
 let jornadaH     = DEFAULT_JORNADA_H;
 let minEntre     = DEFAULT_MIN_ENTRE;
+let pausaMax     = DEFAULT_PAUSA_H;
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 async function init() {
@@ -673,6 +687,7 @@ async function init() {
   minHours   = await getCfg('minhours', DEFAULT_MIN_H);
   jornadaH   = await getCfg('jornadah', DEFAULT_JORNADA_H);
   minEntre   = await getCfg('minentre', DEFAULT_MIN_ENTRE);
+  pausaMax   = await getCfg('pausah',   DEFAULT_PAUSA_H);
   setRigor(await getCfg('rigor', DEFAULT_RIGOR));
   fotoOn     = await getCfg('foto', true);
   adaptOn    = await getCfg('adapt', true);
@@ -1105,8 +1120,10 @@ async function detect() {
 
 // ─── O QUE ESTA PESSOA REGISTRA AGORA ───────────────────────────────────────
 // Todo mundo registra ENTRADA E SAÍDA, alternando: a primeira marcação da
-// jornada é a entrada, a seguinte é a saída. Quem está marcado com `plantao`
-// no cadastro pode fazer isso VÁRIAS VEZES no mesmo dia.
+// jornada é a entrada, a seguinte é a saída. A jornada admite INTERVALOS —
+// almoço, café — e sair e voltar dentro da pausa máxima continua a mesma
+// jornada. Quem está marcado com `plantao` no cadastro pode ir e voltar sem
+// esse limite, quantas vezes o turno pedir.
 //
 // Devolve { type:'entry'|'exit', block:null|{last,freeAt} }. `block` preenchido
 // significa: é essa a marcação que falta, mas ainda não está liberada.
@@ -1139,10 +1156,20 @@ async function planoDoRegistro(user) {
   // da tela de sucesso.
   if (!last || last.type !== 'exit') return { type: 'entry', block: null };
 
-  // Plantão: sair e voltar é o trabalho, não uma segunda jornada. A trava longa
-  // pressupõe uma jornada por dia — para quem faz ronda ela recusava a volta e,
-  // pior, a marcação seguinte entrava com o tipo trocado. Vale só o curto.
-  const semTravaLonga = user.plantao || !mesmoDia(last);
+  // PAUSA CURTA é intervalo DENTRO da jornada — almoço, café, a ronda do
+  // plantão. Voltar dela não abre jornada nova, então a trava longa não se
+  // aplica: vale só o intervalo curto, que segue barrando o toque duplo na
+  // tela de sucesso. Sem isto, quem saísse para o almoço às 11:30 só voltaria
+  // a bater às 23:30, e a coluna E2 da planilha nunca encheria.
+  //
+  // ⚠ `pausaMax` tem que ser o MESMO valor do `PAUSA_MAX_H` no apps-script.gs.
+  // Se o app aceitar uma pausa maior do que a planilha usa para agrupar, ela
+  // parte em duas jornadas um par que o app tratou como um só.
+  //
+  // Plantão continua isento por outro motivo: para quem faz ronda, sair e
+  // voltar é o trabalho, e a volta pode passar da pausa máxima.
+  const pausaCurta    = horasDesde(last) <= pausaMax;
+  const semTravaLonga = user.plantao || pausaCurta || !mesmoDia(last);
   return {
     type : 'entry',
     block: semTravaLonga ? travaMinutos(last, minEntre) : travaHoras(last, minHours),
@@ -1662,6 +1689,7 @@ async function goAdmin() {
   document.getElementById('cfgMinH').value    = minHours;
   document.getElementById('cfgJornada').value = jornadaH;
   document.getElementById('cfgMinEntre').value= minEntre;
+  document.getElementById('cfgPausa').value   = pausaMax;
   document.getElementById('cfgRigor').value   = rigorNome;
   document.getElementById('cfgPhoto').checked = fotoOn;
   document.getElementById('cfgLive').checked  = liveOn;
@@ -1709,6 +1737,12 @@ async function saveSettings() {
     toast('Intervalo entre entrada e saída deve ser entre 0 e 240 minutos.'); return;
   }
 
+  const rawP = document.getElementById('cfgPausa').value.trim();
+  const pau  = rawP === '' ? DEFAULT_PAUSA_H : Number(rawP);
+  if (!Number.isFinite(pau) || pau < 0 || pau > 12) {
+    toast('Pausa máxima deve ser um número entre 0 e 12 horas.'); return;
+  }
+
   const wake = document.getElementById('cfgWake').checked;
   const gest = document.getElementById('cfgGesture').checked;
   const rig  = document.getElementById('cfgRigor').value;
@@ -1722,6 +1756,7 @@ async function saveSettings() {
   await setCfg('minhours', hrs);
   await setCfg('jornadah', jor);
   await setCfg('minentre', ent);
+  await setCfg('pausah', pau);
   await setCfg('rigor', rig);
   await setCfg('foto', fot);
   await setCfg('live', liv);
@@ -1736,6 +1771,7 @@ async function saveSettings() {
   minHours   = hrs;
   jornadaH   = jor;
   minEntre   = ent;
+  pausaMax   = pau;
   wakeWanted = wake;
   if (wake) acquireWakeLock(); else releaseWakeLock();
 

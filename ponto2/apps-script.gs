@@ -362,6 +362,10 @@ const ABA_FER  = 'Feriados';
 
 const PARES_MAX   = 5;   // pares de entrada/saída que cabem numa linha
 const PAUSA_MAX_H = 4;   // pausa maior que isto começa uma jornada NOVA
+//                       ⚠ tem que ser o MESMO valor de "Pausa máxima que
+//                       continua a mesma jornada" no Admin do app. Se a
+//                       planilha usar um limite menor, ela parte em duas
+//                       jornadas um intervalo que o app aceitou como um só.
 const NORMAIS_H   = 8;   // jornada normal; o que passa disso é hora extra 50%
 const NOT_INI_H   = 21;  // adicional noturno das 21:00 …
 const NOT_FIM_H   = 5;   // … às 05:00
