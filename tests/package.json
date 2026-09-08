@@ -3,7 +3,7 @@
   "private": true,
   "description": "Testes do Ponto Digital e do Ponto Saída. Rode: npm install && npm test",
   "scripts": {
-    "test": "node smoke.js && node apps-script.test.js && node ponto2-regra.test.js && node ponto2-smoke.js"
+    "test": "node smoke.js && node apps-script.test.js && node ponto2-regra.test.js && node jornadas.test.js && node ponto2-smoke.js"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.0.0",

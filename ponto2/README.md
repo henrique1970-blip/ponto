@@ -305,6 +305,69 @@ operações, então esquecer de cortar não quebra par nenhum.
 > responde `Ponto Saida OK - v2 - Tipo dinamico (Entrada/Saida)`.
 > Registros antigos, que não trazem o campo, continuam sendo lidos como saída.
 
+## Aba `Jornadas` — horas calculadas
+
+**Menu Ponto Saída → Recalcular jornadas e horas.** A aba `Saidas` continua
+sendo o registro bruto e auditável — uma linha por marcação, com foto e prova
+de vida — e não é tocada. O cálculo sai numa aba própria, refeita do zero a
+cada execução: se algo sair errado, nenhum dado foi perdido.
+
+Uma linha por **jornada**, não por dia civil. Quem entra às 22:00 e sai às
+06:00 trabalhou um turno só; quebrado por data, esse turno viraria duas linhas
+— uma terminando sem saída, outra começando com uma — e nenhuma contaria a
+história. Marcação que caiu no dia seguinte vem com `+1` ao lado da hora.
+
+| Coluna | O que traz |
+|---|---|
+| Nome · Início · Dia · Tipo de dia · Fim | identificação da jornada; *Tipo de dia* é Útil, Domingo ou Feriado |
+| `E1 S1 … E5 S5` | até **5 pares** de entrada/saída — o vão entre `S1` e `E2` é o almoço, o café, a ronda |
+| Pausas | soma dos vãos entre os pares. **Não conta como hora trabalhada** |
+| Total trabalhado | soma dos pares |
+| Normais · HE 50% · HE 100% · Adic. noturno 20% | o cálculo, abaixo |
+| Observação | jornada aberta, saída órfã, pares além do limite |
+
+As colunas de tempo são **duração de verdade** (formato `[h]:mm`), não texto —
+somam numa célula de total.
+
+### Como as horas são classificadas
+
+Cada par entrada/saída é **fatiado na virada do dia** antes de ser
+classificado. Sem isso, uma jornada que começa no sábado e entra no domingo
+seria julgada inteira pelo dia em que começou.
+
+- **HE 100%** — horas caídas em **domingo ou feriado**, todas elas.
+- **HE 50%** — nas horas de segunda a sábado, o que passa de **8h** na jornada.
+- **Normais** — o restante das horas de segunda a sábado.
+- **Adicional noturno 20%** — horas entre **21:00 e 05:00**, de qualquer dia.
+  É um adicional que **se soma** aos outros: a mesma hora pode ser extra e
+  noturna.
+
+`Normais + HE 50% + HE 100% = Total trabalhado` — há teste garantindo que fecha.
+
+> ⚠️ O percentual de 20% e a faixa 21:00–05:00 vieram da especificação da
+> operação, não da lei — a CLT urbana usa 20% sobre 22:00–05:00 com hora
+> reduzida de 52'30", e a lei rural usa 25% sobre 21:00–05:00 sem redução.
+> Confira contra a convenção coletiva. Os valores estão em constantes no topo
+> da seção (`NOT_INI_H`, `NOT_FIM_H`, `ADIC_NOT_PCT`, `NORMAIS_H`).
+
+### O que separa duas jornadas
+
+Voltar de uma pausa de até **4h** (`PAUSA_MAX_H`) continua a mesma jornada.
+Uma pausa maior começa jornada nova. É a mesma leitura que o app faz do corte
+de meia-noite: os 15 min entre a saída 23:50 e a entrada 00:05 são pausa, não
+um turno novo.
+
+### Feriados
+
+Ficam na aba **`Feriados`**, criada na primeira execução já preenchida com os
+17 de Unaí/MG em 2026. Virar o ano é editar a planilha, não o código. O
+documento de origem trazia só data e dia da semana, então a coluna *Descrição*
+nasce vazia — preencha se quiser.
+
+> **Não precisa reimplantar o app da web.** `doPost` e `doGet` não mudaram; o
+> menu roda sempre o código salvo no editor. Basta colar o `apps-script.gs`
+> novo e recarregar a planilha.
+
 ## Trava de 12 horas
 
 A trava separa uma jornada da seguinte: conta a partir da **última saída** e
