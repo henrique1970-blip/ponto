@@ -1,18 +1,20 @@
-# Ponto Saída (ponto2)
+# Ponto (ponto2)
 
-Variante do **Ponto Digital** que registra **apenas a saída**, com uma etapa de
+Variante do **Ponto Digital** que registra **entrada e saída**, com uma etapa de
 confirmação explícita após o reconhecimento facial.
 
-Desde 04/09/2026 há uma exceção por funcionário: quem for marcado como
-**"registra entrada e saída"** no cadastro alterna entre as duas marcações neste
-mesmo aparelho. Todo o resto do quadro continua **só na saída** — ver
-*[Entrada e saída para funcionários específicos](#entrada-e-saída-para-funcionários-específicos)*.
+Nasceu como app **só de saída**. Desde 08/09/2026 o quadro inteiro registra as
+duas marcações: a primeira da jornada é a entrada, a seguinte é a saída — ver
+*[Entrada e saída](#entrada-e-saída)*. A marca por funcionário que valeu entre
+04/09 e 08/09 (*"registra entrada e saída"*) deixou de existir: virou o
+comportamento de todo mundo, e nenhum cadastro precisou ser refeito.
 
 ## O que muda em relação ao app original (`../index.html`)
 
-| | Ponto Digital | Ponto Saída (este) |
+| | Ponto Digital | Ponto (este) |
 |---|---|---|
-| Tipo de registro | Entrada **e** saída | **Saída** — e entrada só para quem for marcado no cadastro |
+| Tipo de registro | Entrada **e** saída | Entrada **e** saída |
+| Como decide a marcação | Por **dia civil** | Pela **jornada aberta** — atravessa a meia-noite |
 | Após reconhecer o rosto | Registrava direto no toque do botão | Abre uma **tela de confirmação** |
 | Formas de confirmar | Botão | Botão **ou gesto 👍** (polegar para cima) |
 | Tela do celular | Apaga normalmente | **Fica sempre ligada** (Wake Lock) |
@@ -233,15 +235,10 @@ A foto só serve se alguém olhar. A planilha ganha um menu **Ponto Saída**:
 Assim o erro deixa de ser invisível: em vez de auditar tudo, olha-se a foto das
 poucas linhas laranja.
 
-## Entrada e saída para funcionários específicos
+## Entrada e saída
 
-O padrão do app continua sendo **só a saída**. Para liberar a entrada para
-alguém, marque no cadastro (**Admin → + Cadastrar funcionário**) a caixa
-**"Registra entrada e saída neste aparelho"**. Na lista de funcionários eles
-aparecem com a etiqueta `entrada+saída`, e o título da tela passa de
-*Registro de Saída* para *Registro de Ponto* assim que existir alguém marcado.
-
-Para essas pessoas o app decide sozinho qual marcação falta:
+Todo funcionário registra as duas marcações — não há nada a marcar no cadastro.
+O app decide sozinho qual marcação falta:
 
 | Situação | Próxima marcação |
 |---|---|
@@ -265,9 +262,8 @@ de madrugada. Duas configurações governam isso, em **Admin → Configurações
 ### Plantão — várias entradas e saídas por dia
 
 Quem sai e volta durante o turno (ronda de pivô, chamado noturno) marca no
-cadastro a caixa **"Plantão — várias entradas e saídas por dia"**. Ela liga
-junto o "entrada e saída", que é o modo em que o plantão faz sentido, e aparece
-na lista de funcionários com a etiqueta `plantão`.
+cadastro a caixa **"Plantão — várias entradas e saídas por dia"** e aparece na
+lista de funcionários com a etiqueta `plantão`.
 
 Para essas pessoas a trava de 12h entre jornadas **não se aplica**: sair e
 voltar é o trabalho, não uma jornada nova. Vale só o intervalo curto (5 min),
@@ -301,26 +297,26 @@ nem reabrir às 00:05 nem bater a saída às 08:00.
 aberta (`23:00 → 04:00` funciona sem nenhum corte). A regra aceita as duas
 operações, então esquecer de cortar não quebra par nenhum.
 
-> ⚠️ **A planilha precisa do Apps Script novo.** A coluna `Tipo` era literal
-> `'Saída'`; agora segue o tipo do registro. Sem reimplantar o
-> `apps-script.gs`, as entradas chegam rotuladas como saída.
+> ⚠️ **A planilha precisa do Apps Script `v2` ou mais novo.** A coluna `Tipo`
+> era literal `'Saída'`; desde o v2 ela segue o tipo do registro. Com uma
+> implantação anterior ao v2, **todas** as entradas chegam rotuladas como
+> saída — agora que o quadro inteiro bate entrada, isso corromperia a folha.
+> Para conferir o que está no ar, abra a URL do webhook no navegador: ela
+> responde `Ponto Saida OK - v2 - Tipo dinamico (Entrada/Saida)`.
 > Registros antigos, que não trazem o campo, continuam sendo lidos como saída.
 
 ## Trava de 12 horas
 
-Um funcionário **não consegue registrar uma nova saída antes de 12h** da última.
-Enquanto estiver travado, o app mostra o nome e
-`Saída já registrada às HH:MM · libera em 11h56` — o botão de confirmar nem aparece.
-
-Para quem registra **entrada e saída**, a mesma trava passa a separar uma
-jornada da seguinte: conta a partir da **última saída** e segura a **próxima
-entrada**. Entre a entrada e a sua saída vale o intervalo curto (5 min).
+A trava separa uma jornada da seguinte: conta a partir da **última saída** e
+segura a **próxima entrada**. Enquanto estiver travado, o app mostra o nome e
+`Saída já registrada às HH:MM · libera em 11h56` — o botão de confirmar nem
+aparece. Entre a entrada e a sua saída vale o intervalo curto (5 min).
 
 A regra é verificada em **dois pontos**: ao reconhecer o rosto (não abre a
 confirmação) e de novo **imediatamente antes de gravar** — ou seja, ela não
 depende da tela para valer.
 
-Ajustável em **Admin → Configurações → Intervalo mínimo entre saídas do mesmo
+Ajustável em **Admin → Configurações → Intervalo mínimo entre jornadas do mesmo
 funcionário (horas)**.
 Padrão **12**, aceita 0–24. **`0` desliga a trava** (útil só para testes).
 
@@ -364,6 +360,7 @@ Armazenamento local próprio, **independente do app original**:
 IndexedDB `PontoSaida` (o original usa `PontoDigital`). Os funcionários precisam
 ser cadastrados de novo aqui — os dois apps não compartilham cadastro.
 
-Vale para a marca de entrada+saída também: ela é **deste aparelho**. Se a pessoa
-bate a entrada no app da raiz e a saída aqui, não marque a caixa — os dois apps
-não se enxergam, e a entrada acabaria registrada em duas planilhas.
+Vale também para a alternância entrada/saída: ela é contada **neste aparelho**.
+Se a pessoa bate a entrada no app da raiz e vem aqui bater a saída, os dois apps
+não se enxergam — este vai oferecer *entrada* de novo, e a jornada acaba partida
+em duas planilhas. Cada pessoa usa um app só.

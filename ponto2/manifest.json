@@ -1,7 +1,7 @@
 {
-  "name": "Ponto Saída",
-  "short_name": "Saída",
-  "description": "Registro de saída com reconhecimento facial e confirmação por gesto — funciona offline",
+  "name": "Ponto",
+  "short_name": "Ponto",
+  "description": "Registro de entrada e saída com reconhecimento facial e confirmação por gesto — funciona offline",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

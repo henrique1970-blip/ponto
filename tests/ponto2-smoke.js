@@ -1,10 +1,10 @@
 // Carrega o ponto2/index.html DE VERDADE num navegador simulado (jsdom) e
 // dirige o registro do começo ao fim: o que a tela diz e o que entra no banco.
 //
-// O ponto2 é um app de SAÍDA. Quem está marcado como "entrada e saída" no
-// cadastro alterna; todo o resto do quadro continua registrando só a saída,
-// com a trava de 12h de sempre. Este teste cobre os dois lados no mesmo boot —
-// é onde um `type` trocado apareceria antes de virar linha errada na folha.
+// O ponto2 registra ENTRADA E SAÍDA para todo mundo: a primeira marcação da
+// jornada é a entrada, a seguinte é a saída, com a trava de 12h entre jornadas.
+// Este teste dirige a alternância inteira no mesmo boot — é onde um `type`
+// trocado apareceria antes de virar linha errada na folha.
 //
 // A regra em si (sem tela) tem teste próprio em `ponto2-regra.test.js`.
 const fs = require('fs');
@@ -34,7 +34,7 @@ html = html.replace('</body>', `<script>
     get users(){return users},
     set liveOn(v){liveOn=v}, set gestureOn(v){gestureOn=v},
     enterConfirm, confirmPunch, planoDoRegistro, dbPut, dbAll,
-    loadUsers, renderPlog, renderUserList, updTitulo,
+    loadUsers, renderPlog, renderUserList,
   };
 </script></body>`);
 
@@ -97,24 +97,21 @@ async function esperaBoot(limite = 8000) {
 
   console.log('\n【1】 Abre normalmente');
   ok($('loading').style.display === 'none', 'sai da tela de carregamento');
-  ok($('appTitle').textContent.includes('Saída'),
-     'sem ninguém marcado, o título continua "Registro de Saída"', $('appTitle').textContent);
+  ok($('appTitle').textContent.includes('Ponto'),
+     'o título é "Registro de Ponto"', $('appTitle').textContent);
 
-  console.log('\n【2】 Funcionário marcado como entrada+saída');
+  console.log('\n【2】 Funcionário comum — a primeira marcação é a entrada');
   w.__t.liveOn    = false;     // sem câmera não há como provar vivacidade
   w.__t.gestureOn = false;
-  await w.__t.dbPut('users', { name:'Beto Duplo', descs:[[0,1]], thumb:'', duplo:true,
+  await w.__t.dbPut('users', { name:'Beto', descs:[[0,1]], thumb:'',
                                at:new Date().toISOString() });
   await w.__t.loadUsers();
-  w.__t.updTitulo();
-  ok($('appTitle').textContent.includes('Ponto'),
-     'o título passa a "Registro de Ponto"', $('appTitle').textContent);
 
-  const user  = w.__t.users.find(u => u.name === 'Beto Duplo');
+  const user  = w.__t.users.find(u => u.name === 'Beto');
   let plano = await w.__t.planoDoRegistro(user);
   ok(plano.type === 'entry', 'a primeira marcação dele é Entrada');
 
-  w.__t.enterConfirm({ name:user.name, type:plano.type, duplo:true, dist:0.2,
+  w.__t.enterConfirm({ name:user.name, type:plano.type, dist:0.2,
                        margem:0.3, thumb:'', id:user.id, desc:[0,1] });
   await sleep(80);
   ok(w.document.querySelector('#confirmOv .co-hi').textContent === 'Confirmar entrada',
@@ -146,7 +143,7 @@ async function esperaBoot(limite = 8000) {
   ok(plano.type === 'exit' && !plano.block, 'meia hora depois: Saída liberada');
 
   w.__t.mode = 'scanning';
-  w.__t.enterConfirm({ name:user.name, type:plano.type, duplo:true, dist:0.2,
+  w.__t.enterConfirm({ name:user.name, type:plano.type, dist:0.2,
                        margem:0.3, thumb:'', id:user.id, desc:[0,1] });
   await sleep(80);
   ok($('btnPunch').textContent === '✔ CONFIRMAR SAÍDA', 'agora o botão diz CONFIRMAR SAÍDA',
@@ -157,24 +154,33 @@ async function esperaBoot(limite = 8000) {
   ok(regs.length === 2, 'gravou o 2º registro', 'há ' + regs.length);
   ok((regs[1]||{}).type === 'exit', '2º gravado como type=exit', JSON.stringify(regs[1]||{}).slice(0,120));
 
-  console.log('\n【4】 Quem NÃO está marcado continua só na saída');
-  await w.__t.dbPut('users', { name:'Ana Saida', descs:[[1,0]], thumb:'',
+  console.log('\n【4】 Quem já tinha histórico só de saída passa a bater entrada');
+  // Migração: antes da mudança essa pessoa só registrava saída. O banco dela é
+  // uma sequência de 'exit' — e a próxima marcação tem que ser a ENTRADA.
+  await w.__t.dbPut('users', { name:'Ana', descs:[[1,0]], thumb:'',
                                at:new Date().toISOString() });
   await w.__t.loadUsers();
-  const ana = w.__t.users.find(u => u.name === 'Ana Saida');
+  const ana = w.__t.users.find(u => u.name === 'Ana');
+  await w.__t.dbPut('punches', { userName:'Ana', type:'exit', synced:true,
+                                 timestamp:new Date(Date.now() - 20*3600e3).toISOString() });
+
   plano = await w.__t.planoDoRegistro(ana);
-  ok(plano.type === 'exit' && !plano.block, 'primeira marcação dela é Saída, liberada');
+  ok(plano.type === 'entry' && !plano.block,
+     'com histórico só de saída, a próxima é Entrada', JSON.stringify(plano.block||{}));
   w.__t.mode = 'scanning';
-  w.__t.enterConfirm({ name:ana.name, type:plano.type, duplo:false, dist:0.2,
+  w.__t.enterConfirm({ name:ana.name, type:plano.type, dist:0.2,
                        margem:0.3, thumb:'', id:ana.id, desc:[1,0] });
   await sleep(80);
-  ok($('btnPunch').textContent === '✔ CONFIRMAR SAÍDA', 'o botão dela diz CONFIRMAR SAÍDA');
+  ok($('btnPunch').textContent === '✔ CONFIRMAR ENTRADA', 'o botão dela diz CONFIRMAR ENTRADA',
+     $('btnPunch').textContent);
   await w.__t.confirmPunch('botao');
   await sleep(400);
   regs = await w.__t.dbAll('punches');
-  ok(regs.filter(r=>r.userName==='Ana Saida')[0].type === 'exit', 'gravou saída para ela');
+  ok(regs.filter(r=>r.userName==='Ana').slice(-1)[0].type === 'entry',
+     'gravou entrada para ela');
   plano = await w.__t.planoDoRegistro(ana);
-  ok(plano.type === 'exit' && !!plano.block, 'e a trava de 12h dela continua valendo');
+  ok(plano.type === 'exit' && !!plano.block,
+     'e a saída dela fica travada pelo intervalo curto');
 
   console.log('\n【5】 Erros de JavaScript');
   ok(erros.length === 0, 'nenhum erro no console', erros.join(' | '));

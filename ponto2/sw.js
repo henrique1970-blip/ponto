@@ -1,4 +1,4 @@
-// Ponto Saída — Service Worker
+// Ponto — Service Worker
 // Offline-first robusto:
 //  - Núcleo local: precache OBRIGATÓRIO (mesma origem, confiável).
 //  - Libs + modelos de IA (face-api + MediaPipe): precache BEST-EFFORT
@@ -12,7 +12,9 @@
 // v8: a trava de 12h deixou de valer na virada do dia, para permitir cortar a
 //     jornada na meia-noite.
 // v9: cadastro ganhou "plantão" — várias entradas e saídas por dia.
-const CACHE = 'ponto-saida-v9';
+// v10: todo mundo passa a registrar entrada e saída; a marca por funcionário
+//      deixou de existir. O app não é mais só de saída.
+const CACHE = 'ponto-saida-v10';
 
 // Mesma origem — precisa funcionar para o app abrir offline.
 const CORE = [

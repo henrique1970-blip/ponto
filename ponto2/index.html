@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Ponto Saída</title>
+<title>Ponto</title>
 <link rel="manifest" href="manifest.json">
 <!-- (a) Ícone da aba do navegador. -->
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <!-- (b) Ícone do atalho no iOS (no Android quem manda é o manifest.json). -->
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="apple-mobile-web-app-title" content="Saída">
+<meta name="apple-mobile-web-app-title" content="Ponto">
 <meta name="theme-color" content="#F5821F">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -134,8 +134,6 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .uphotos{font-size:.75rem;color:var(--text2)}
 .tag-vis{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   background:#FEF3C7;color:#92400E;border-radius:5px;padding:1px 5px;vertical-align:middle}
-.tag-duplo{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-  background:#DCFCE7;color:#166534;border-radius:5px;padding:1px 5px;vertical-align:middle}
 .tag-plantao{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   background:#DBEAFE;color:#1E40AF;border-radius:5px;padding:1px 5px;vertical-align:middle}
 .empty-msg{font-size:.85rem;color:var(--text2);text-align:center;padding:12px 0}
@@ -193,10 +191,10 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 <!-- TOAST -->
 <div id="toast"></div>
 
-<!-- ========== VIEW: PUNCH (SAÍDA) ========== -->
+<!-- ========== VIEW: PUNCH (PONTO) ========== -->
 <div class="view active" id="vPunch">
   <div class="hdr">
-    <h1 id="appTitle">🔴 Registro de Saída</h1>
+    <h1 id="appTitle">⏱ Registro de Ponto</h1>
     <button class="hdr-btn" onclick="goAdmin()">Admin</button>
   </div>
   <div class="sbar">
@@ -214,7 +212,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
 
     <!-- Passo de confirmação -->
     <div class="confirm-ov" id="confirmOv">
-      <div class="co-hi">Confirmar saída</div>
+      <div class="co-hi">Confirmar registro</div>
       <img class="co-face" id="coFace" alt="">
       <div class="co-name" id="coName"></div>
       <div class="co-thumb">👍</div>
@@ -231,7 +229,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       <div class="done-check">✅</div>
       <div class="done-name" id="doneName"></div>
       <div class="done-time" id="doneTime"></div>
-      <div class="done-sub" id="doneSub">Saída registrada</div>
+      <div class="done-sub" id="doneSub">Registro efetuado</div>
     </div>
   </div>
   <div class="punch-panel">
@@ -270,12 +268,11 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         <input id="cfgPin" type="password" placeholder="Deixe em branco para não alterar">
       </div>
       <div class="field">
-        <label>Intervalo mínimo entre saídas do mesmo funcionário (horas)</label>
+        <label>Intervalo mínimo entre jornadas do mesmo funcionário (horas)</label>
         <input id="cfgMinH" type="number" min="0" max="24" step="1" placeholder="12">
       </div>
-      <p class="hint">Impede que a mesma pessoa registre outra saída antes desse prazo.
-        Para quem registra <b>entrada e saída</b>, é o intervalo entre uma jornada e a
-        seguinte, contado da última saída — e vale <b>dentro do mesmo dia</b>.
+      <p class="hint">É o intervalo entre uma jornada e a seguinte, contado da última
+        saída — e vale <b>dentro do mesmo dia</b>.
         Virando o dia, a pessoa pode reabrir na hora: é o que permite
         <b>cortar a jornada na meia-noite</b> (saída 23:50, entrada 00:05) sem perder a
         noite. Nesse caso vale só o intervalo curto abaixo.
@@ -287,10 +284,10 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
         <label>Duração máxima da jornada (horas)</label>
         <input id="cfgJornada" type="number" min="1" max="24" step="1" placeholder="16">
       </div>
-      <p class="hint">Só vale para quem registra <b>entrada e saída</b>. Depois de uma
-        entrada, o app oferece a saída até esse prazo — é o que faz o turno da noite
-        (entra 23:00, sai 04:00) fechar no dia seguinte. Passado o prazo, entende que a
-        saída foi esquecida e volta a oferecer entrada. Padrão: <b>16h</b>.</p>
+      <p class="hint">Depois de uma entrada, o app oferece a saída até esse prazo — é o
+        que faz o turno da noite (entra 23:00, sai 04:00) fechar no dia seguinte. Passado
+        o prazo, entende que a saída foi esquecida e volta a oferecer entrada.
+        Padrão: <b>16h</b>.</p>
 
       <div class="field">
         <label>Intervalo mínimo entre a entrada e a saída (minutos)</label>
@@ -398,21 +395,11 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
     <p class="hint">Marque para pessoas que passam na frente do totem mas não são do quadro.
       Cadastrá-las evita que o app as confunda com um funcionário parecido.</p>
     <div class="field-chk">
-      <input id="regDuplo" type="checkbox"
-             onchange="if(!this.checked) document.getElementById('regPlantao').checked = false">
-      <label for="regDuplo">Registra <b>entrada e saída</b> neste aparelho</label>
-    </div>
-    <p class="hint">Sem marcar, a pessoa segue registrando <b>só a saída</b> — o comportamento
-      padrão deste app. Marcado, o app alterna: a primeira marcação da jornada é a entrada,
-      a seguinte é a saída.</p>
-    <div class="field-chk">
-      <input id="regPlantao" type="checkbox"
-             onchange="if(this.checked) document.getElementById('regDuplo').checked = true">
+      <input id="regPlantao" type="checkbox">
       <label for="regPlantao">Plantão — <b>várias entradas e saídas por dia</b></label>
     </div>
     <p class="hint">Para quem sai e volta durante o turno — ronda de pivô, chamado noturno.
-      Sem isto, a pessoa registra <b>uma jornada por dia</b> e a trava de 12h barra a segunda.
-      Marcar aqui liga também "entrada e saída", que é o modo em que o plantão faz sentido.</p>
+      Sem isto, a pessoa registra <b>uma jornada por dia</b> e a trava de 12h barra a segunda.</p>
     <video id="regVideo" class="reg-video" autoplay muted playsinline></video>
     <div class="thumbs" id="thumbs"></div>
     <div class="reg-status" id="regStatus">Tire 3 fotos para melhor precisão (mínimo 1).</div>
@@ -1071,7 +1058,6 @@ async function detect() {
   enterConfirm({
     name  : p1.name,
     type  : plano.type,
-    duplo : !!p1.user.duplo,
     plantao: !!p1.user.plantao,
     dist  : p1.dist,
     margem: p2 ? p2.dist - p1.dist : null,
@@ -1082,9 +1068,9 @@ async function detect() {
 }
 
 // ─── O QUE ESTA PESSOA REGISTRA AGORA ───────────────────────────────────────
-// Por padrão este app é de SAÍDA — e continua sendo para todo mundo. Quem está
-// marcado com `duplo` no cadastro registra entrada e saída, alternando; quem
-// também está marcado com `plantao` pode fazer isso VÁRIAS VEZES no mesmo dia.
+// Todo mundo registra ENTRADA E SAÍDA, alternando: a primeira marcação da
+// jornada é a entrada, a seguinte é a saída. Quem está marcado com `plantao`
+// no cadastro pode fazer isso VÁRIAS VEZES no mesmo dia.
 //
 // Devolve { type:'entry'|'exit', block:null|{last,freeAt} }. `block` preenchido
 // significa: é essa a marcação que falta, mas ainda não está liberada.
@@ -1094,9 +1080,6 @@ async function planoDoRegistro(user) {
     .filter(p => p.userName === user.name)
     .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
   const last = mine[mine.length - 1] || null;
-
-  // Só-saída: exatamente a trava de sempre — uma saída a cada `minHours`.
-  if (!user.duplo) return { type: 'exit', block: travaHoras(last, minHours) };
 
   // Entrada em aberto dentro da jornada: o que falta é a saída. A trava aqui é
   // curta, e existe só para a tela de sucesso não emendar numa segunda leitura
@@ -1501,7 +1484,7 @@ async function confirmPunch(method) {
   // virou no meio da confirmação, vale a regra, e a tela de sucesso dirá a
   // verdade porque também lê daqui.
   const plano = await planoDoRegistro({
-    name: match.name, duplo: match.duplo, plantao: match.plantao,
+    name: match.name, plantao: match.plantao,
   });
   if (plano.block) {
     toast(blockMsg(plano.block), 4500);
@@ -1736,7 +1719,6 @@ function renderUserList() {
       <img class="uavatar" src="${u.thumb||''}" onerror="this.style.visibility='hidden'">
       <div class="uinfo">
         <div class="uname">${esc(u.name)}${u.blocked?' <span class="tag-vis">visitante</span>':''}${
-          !u.blocked && u.duplo ? ' <span class="tag-duplo">entrada+saída</span>' : ''}${
           !u.blocked && u.plantao ? ' <span class="tag-plantao">plantão</span>' : ''}</div>
         <div class="uphotos">${u.descs.length} foto(s)${auto?` · ${auto} aprendida(s)`:''}</div>
       </div>
@@ -1805,16 +1787,6 @@ function setRigor(nome) {
 }
 
 // ─── LOAD USERS ──────────────────────────────────────────────────────────────
-// "Registro de Saída" no alto da tela vira mentira assim que alguém do quadro
-// passa a bater entrada — então o título segue o cadastro.
-function updTitulo() {
-  const el = document.getElementById('appTitle');
-  if (!el) return;
-  const temDuplo = users.some(u => u.duplo && !u.blocked);
-  el.textContent = temDuplo ? '⏱ Registro de Ponto' : '🔴 Registro de Saída';
-  document.title = temDuplo ? 'Ponto' : 'Ponto Saída';
-}
-
 async function loadUsers() {
   users = await dbAll('users');
   // Descritores em Float32Array uma vez só — a comparação roda a cada 350ms.
@@ -1823,7 +1795,6 @@ async function loadUsers() {
     u.autoF = (u.auto  || []).map(d => Float32Array.from(d));
   }
   users = users.filter(u => u.descF.length);
-  updTitulo();
   resetStreak();
 }
 
@@ -1833,7 +1804,6 @@ async function openReg() {
   regThumbs = [];
   document.getElementById('regName').value    = '';
   document.getElementById('regBlocked').checked = false;
-  document.getElementById('regDuplo').checked   = false;
   document.getElementById('regPlantao').checked = false;
   document.getElementById('thumbs').innerHTML = '';
   document.getElementById('regStatus').textContent = 'Tire 3 fotos para melhor precisão (mínimo 1).';
@@ -1914,9 +1884,7 @@ async function saveUser() {
   if (!regDescs.length) { toast('Capture ao menos 1 foto.'); return; }
 
   const blocked = document.getElementById('regBlocked').checked;
-  const duplo   = document.getElementById('regDuplo').checked;
-  // Plantão sem entrada e saída não existe: sem alternância não há "voltar".
-  const plantao = document.getElementById('regPlantao').checked && duplo;
+  const plantao = document.getElementById('regPlantao').checked;
 
   // Dois cadastros parecidos demais deixam o sistema permanentemente ambíguo:
   // o teste de margem passaria a recusar os dois. Melhor barrar na entrada.
@@ -1945,16 +1913,10 @@ async function saveUser() {
 
   const existing = users.find(u=>u.name.toLowerCase()===name.toLowerCase());
   if (existing) {
-    // O modal abre sempre com as caixas limpas. Recadastrar as fotos de quem já
-    // registra entrada e saída apagaria a marca em silêncio — e a pessoa
-    // voltaria a bater só a saída sem ninguém perceber. Então avisa.
+    // O modal abre sempre com as caixas limpas. Recadastrar as fotos de quem é
+    // plantão apagaria a marca em silêncio — e a pessoa voltaria a uma jornada
+    // por dia sem ninguém perceber. Então avisa.
     let msg = `"${name}" já está cadastrado. Substituir as fotos?`;
-    if (existing.duplo && !duplo) {
-      msg += '\n\n⚠ A caixa "registra entrada e saída" está DESMARCADA: ' +
-             'ele passará a registrar SÓ A SAÍDA.';
-    } else if (!existing.duplo && duplo) {
-      msg += '\n\n➕ Ele passará a registrar ENTRADA E SAÍDA.';
-    }
     if (existing.plantao && !plantao) {
       msg += '\n\n⚠ O plantão está DESMARCADO: ele volta a uma jornada por dia.';
     } else if (!existing.plantao && plantao) {
@@ -1964,7 +1926,6 @@ async function saveUser() {
     existing.descs   = regDescs;
     existing.thumb   = regThumbs[0];
     existing.blocked = blocked;
-    existing.duplo   = duplo;
     existing.plantao = plantao;
     delete existing.auto;               // fotos aprendidas eram do cadastro antigo
     delete existing.descF; delete existing.autoF;   // caches derivados
@@ -1975,7 +1936,6 @@ async function saveUser() {
       descs: regDescs,
       thumb: regThumbs[0],
       blocked,
-      duplo,
       plantao,
       at   : new Date().toISOString(),
     });
@@ -1984,8 +1944,7 @@ async function saveUser() {
   toast(`"${name}" cadastrado como ${
     blocked  ? 'visitante'
     : plantao ? 'funcionário (plantão: várias por dia)'
-    : duplo   ? 'funcionário (entrada e saída)'
-    : 'funcionário (só saída)'}! ✓`);
+    : 'funcionário (entrada e saída)'}! ✓`);
   closeReg();
   await loadUsers();
   renderUserList();
