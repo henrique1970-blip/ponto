@@ -321,218 +321,27 @@ próprio código, ao colar a versão nova:
   `Saidas (migrada dd-MM-aaaa HH.mm)`. **Nada é apagado** — confira e apague à
   mão quando quiser.
 
-## Painel de botões
-
-O Apps Script não consegue criar um desenho e amarrar uma função a ele — isso
-só existe pelo menu do Sheets, à mão, e some se a planilha for copiada. O que
-ele consegue criar sozinho é uma **caixa de seleção**, e marcar uma caixa
-dispara o script. É o botão que vem junto com o código.
-
-O painel ocupa as **3 primeiras linhas** da `Registros`; o cabeçalho desceu
-para a linha 4 e os registros começam na 5. A migração **empurra** as linhas
-para baixo — nenhum registro se perde.
-
-|  | A | B |
-|---|---|---|
-| **1** | Mês de referência | `setembro/2026` ▾ — e, na D1, a resposta da última ação |
-| **2** | ☐ | ◀ Calcular horas do mês |
-| **3** | ☐ | ◀ Mover os dados do mês |
-
-O painel é desenhado sozinho ao ABRIR a planilha, na primeira vez depois de
-colar o código — não é preciso rodar nada para ele aparecer.
-
-A lista suspensa da B1 só oferece **meses que têm registro**, e se atualiza
-sozinha. Marcada a caixinha, ela se desmarca e a ação roda; o resultado aparece
-na D1 e num aviso flutuante.
-
-> **Rode uma vez: menu Ponto → ① Preparar planilha (painel de botões).** É o
-> que instala o gatilho das caixinhas — sem ele o painel aparece, mas marcar a
-> caixa não faz nada. O Google vai pedir autorização na primeira vez. Os dois
-> botões também estão no menu, se preferir.
-
-### Botão 1 — Calcular horas do mês
-
-Escreve a aba **`<mês>_calculos`** (`agosto_calculos`), criada se não existir e
-**refeita do zero** a cada execução: corrigir um registro na origem e recalcular
-sempre bate. Uma linha por **jornada**, ordenada por funcionário.
-
-Lê a `Registros` **e** a `<mês>_registros`, se o mês já tiver sido movido — o
-botão continua funcionando depois do arquivamento.
-
-### Botão 2 — Mover os dados do mês
-
-Tira do caminho o mês fechado: copia para **`<mês>_registros`**
-(`agosto_registros`) ordenado por funcionário, **confere que a cópia chegou**, e
-só então apaga da origem, eliminando de passagem as linhas em branco. A foto
-viaja como fórmula e a caixinha *Conferido* é recriada como caixinha.
-
-Calcule **antes** de mover: assim a jornada que atravessa a virada do mês
-enxerga as duas pontas.
-
-> As abas levam só o nome do mês (`agosto_calculos`), como pedido. Se o mês
-> escolhido **não** for do ano corrente, o ano entra junto
-> (`agosto_2025_calculos`) — dois agostos não podem cair na mesma aba.
-
-## Anular um registro errado
-
-Ponto batido por engano — o aparelho na mão de quem estava testando, a entrada
-que ninguém quis bater às 19:30 — se resolve **marcando a coluna `Anulado`**, a
-última da aba `Registros`. A linha continua ali, cinza e riscada, e o cálculo
-passa a ignorá-la.
-
-Marque a caixinha, ou digite `x` na célula — as duas contam. Para várias de uma
-vez: selecione as linhas e use **menu Ponto → Anular linhas selecionadas**
-(`Reativar linhas selecionadas` desfaz). Depois **recalcule o mês**, senão a aba
-de cálculo continua mostrando o número velho.
-
-### Por que marcar em vez de apagar
-
-Duas razões, e a segunda é provavelmente a que já mordeu você:
-
-1. **O registro bruto é a prova.** Folha de ponto que perde linha perde o valor
-   de prova. O que se quer dizer é "este não conta" — não "este nunca existiu".
-2. **A coluna `Chave` é o que impede o celular de reenviar o mesmo ponto.**
-   Apagada a linha, o aparelho que ainda tiver aquele registro pendente manda
-   de volta, e ele **reaparece**. É por isso que apagar à mão costuma parecer
-   que "não deu certo".
-
-### ⚠️ Anular na planilha NÃO destrava o aparelho
-
-São duas memórias separadas, e essa é a parte que engana:
-
-| Onde | Para que serve |
-|---|---|
-| A **planilha** | é a folha: o que vira hora e dinheiro |
-| O **IndexedDB do celular** | é quem decide se a próxima marcação da pessoa é entrada ou saída, e quem conta a trava de 12h |
-
-O app **nunca lê a planilha**. Anular uma entrada lá não faz o aparelho voltar a
-oferecer *Entrada* para aquela pessoa — ele continua achando que ela está com
-uma jornada aberta.
-
-Para limpar o lado do aparelho, **naquele celular**: `Admin → 🧪 Apagar
-registros locais (teste)`. Ele apaga o histórico **daquele aparelho**, libera a
-trava e faz a próxima marcação voltar a ser *Entrada*.
-
-> Antes de usar, confira que **não há pendências de envio** (o contador de
-> pendentes tem que estar em zero). O que ainda não subiu para a planilha se
-> perde — e é justamente o que ainda não tem cópia em lugar nenhum.
-
-## A aba do mês — horas calculadas
-
-A `Registros` continua sendo o registro bruto e auditável — uma linha por
-marcação, com foto e prova de vida — e **não é tocada** pelos cálculos.
-
-Uma linha por **jornada**, não por dia civil. Quem entra às 22:00 e sai às
-06:00 trabalhou um turno só; quebrado por data, esse turno viraria duas linhas
-— uma terminando sem saída, outra começando com uma — e nenhuma contaria a
-história. Marcação que caiu no dia seguinte vem com `+1` ao lado da hora.
-
-| Coluna | O que traz |
-|---|---|
-| Nome · Data · Dia · Tipo de dia | identificação da jornada; *Tipo de dia* é Útil, Sábado, Domingo ou Feriado |
-| `E1 S1 … E5 S5` | até **5 pares** de entrada/saída — o vão entre `S1` e `E2` é o almoço, o café, a ronda |
-| Pausas | soma dos vãos entre os pares. **Não conta como hora trabalhada** |
-| Total de horas | soma dos pares |
-| Normais · HE 50% · HE 100% · Adic. noturno 20% | o cálculo, abaixo |
-| Observação | jornada aberta, saída órfã, pares além do limite |
-| Anotação | **coluna sua** — o script nunca escreve nela, e o que você digitar sobrevive ao próximo recálculo |
-
-As colunas de tempo são **duração de verdade** (formato `[h]:mm`), não texto —
-somam numa célula de total.
-
-### Como as horas são classificadas
-
-Cada par entrada/saída é **fatiado na virada do dia** antes de ser
-classificado. Sem isso, uma jornada que começa no sábado e entra no domingo
-seria julgada inteira pelo dia em que começou.
-
-- **HE 100%** — horas caídas em **domingo ou feriado**, todas elas.
-- **HE 50%** — o que passa da jornada normal: **8h de segunda a sexta**, **4h
-  no sábado**.
-- **Normais** — o restante.
-- **Adicional noturno 20%** — horas entre **21:00 e 05:00**, de qualquer dia.
-  É um adicional que **se soma** aos outros: a mesma hora pode ser extra e
-  noturna.
-
-`Normais + HE 50% + HE 100% = Total de horas` — há teste garantindo que fecha.
-
-**A cota de 8h (ou 4h) é por pessoa e por dia, contada no dia em que a jornada
-COMEÇOU.** As duas leituras divergem no turno da noite: quem entra 16:00 e sai
-08:00 fez 15h45 de um fôlego só; fatiado por dia civil daria 7h50 numa data e
-7h55 na outra — nenhuma passa de 8h, e o turno inteiro sairia **sem hora
-extra**. Contado pelo dia de início, dá as 7h45 de extra que ele é. E duas
-jornadas no mesmo dia **dividem a mesma cota**: a primeira gasta primeiro.
-
-> ⚠️ O percentual de 20% e a faixa 21:00–05:00 vieram da especificação da
-> operação, não da lei — a CLT urbana usa 20% sobre 22:00–05:00 com hora
-> reduzida de 52'30", e a lei rural usa 25% sobre 21:00–05:00 sem redução.
-> Confira contra a convenção coletiva. Os valores estão em constantes no topo
-> da seção (`NOT_INI_H`, `NOT_FIM_H`, `ADIC_NOT_PCT`, `NORMAIS_SEG_SEX_H`,
-> `NORMAIS_SAB_H`).
-
-### O que separa duas jornadas
-
-Voltar de uma pausa de até **4h** (`PAUSA_MAX_H`) continua a mesma jornada.
-Uma pausa maior começa jornada nova. É a mesma leitura que o app faz do corte
-de meia-noite: os 15 min entre a saída 23:50 e a entrada 00:05 são pausa, não
-um turno novo.
-
-### Feriados
-
-Ficam na aba **`Feriados`**, criada na primeira execução já preenchida com os
-17 de Unaí/MG em 2026. Virar o ano é editar a planilha, não o código. O
-documento de origem trazia só data e dia da semana, então a coluna *Descrição*
-nasce vazia — preencha se quiser.
-
-> ⚠️ **Desta vez PRECISA reimplantar o app da web.** O `doPost` mudou — é ele
-> que grava na aba, e agora ela se chama `Registros` e tem o cabeçalho na linha
-> 4. Colar o código no editor **não** muda o que a URL `/exec` executa: a
-> implantação aponta para uma versão congelada. Sem reimplantar, os pontos
-> batidos no celular continuam criando a `Saidas` velha.
+> ⚠️ **Precisa reimplantar o app da web.** O `doPost` mudou — é ele que grava, e
+> agora a aba tem outro nome. Colar o código no editor **não** muda o que a URL
+> `/exec` executa: a implantação aponta para uma versão congelada. Sem
+> reimplantar, os pontos batidos no celular continuam criando a `Saidas` velha.
 >
-> 1. Cole o `apps-script.gs` novo e **salve**.
-> 2. **Implantar → Gerenciar implantações → ✏️ → Versão: Nova versão.**
->    (Não crie uma implantação NOVA: a URL mudaria e o app pararia de enviar.)
-> 3. **Recarregue a planilha** — é o que faz o menu e o painel aparecerem.
-> 4. Menu **Ponto → ① Preparar planilha**, e aceite a autorização.
+> **Implantar → Gerenciar implantações → ✏️ → Versão: Nova versão.** Não crie
+> uma implantação NOVA: a URL mudaria e o app pararia de enviar. Para conferir o
+> que está no ar, abra a URL do webhook no navegador — ela responde
+> `Ponto Saida OK - v3 - Aba Registros`.
 
-### "Cliquei no menu e não aconteceu nada"
+### A planilha não calcula nada
 
-É o sintoma da **autorização não concedida**, e ele engana porque o painel
-aparece assim mesmo: quem desenha o painel é o `onOpen`, que é *gatilho
-simples* e roda sem autorização nenhuma. Item de menu, não — ele precisa de
-permissão, e sem ela **nenhum** deles roda. Os dois fatos juntos parecem bug no
-código e não são.
+Houve uma versão com painel de botões, escolha de mês, cálculo de horas e
+arquivamento por mês. Ela saiu: a planilha voltou a ser **só o registro bruto**,
+uma linha por marcação. Quem chegou a colar aquela versão não precisa fazer
+nada — ao colar esta, as 3 linhas do painel e a coluna `Anulado` são removidas
+sozinhas, e o cabeçalho volta para a linha 1, com os registros intactos.
 
-O primeiro clique deveria abrir a tela de consentimento do Google. Se o
-navegador bloquear a janela, ou se ela for fechada, o resultado é exatamente
-"nada acontece". Force a autorização pelo editor, onde ela não pode ser
-bloqueada:
-
-1. **Extensões → Apps Script.**
-2. Na barra de cima, escolha a função **`verificar`** na lista e clique **▶
-   Executar**.
-3. Aparece *"É necessário autorizar"* → **Revisar permissões** → escolha a
-   conta → se disser *"O Google não verificou este app"*, clique em
-   **Avançado → Acessar (nome do projeto)** → **Permitir**.
-4. Volte à planilha. O menu funciona a partir daí.
-
-O item **Verificar (o script está autorizado?)** existe para isso: se ele
-responder qualquer coisa, o script está autorizado e o problema é outro — e a
-janela dele diz qual (painel desenhado ou não, mês escolhido, meses com
-registro, gatilho das caixinhas instalado ou não).
-
-Se ainda assim não abrir nada, o registro completo está em **Extensões → Apps
-Script → Execuções** (ícone ⏱ na barra lateral): cada clique de menu vira uma
-linha ali, com o erro. **Nenhuma linha** = a função nem começou, e aí é
-autorização mesmo.
-
-> As três ações passam a avisar quando falham: em vez do aviso vermelho que
-> some sozinho, um alerta que exige OK e o texto do erro na **D1**, que fica.
->
-> Para conferir o que está no ar, abra a URL do webhook no navegador: ela
-> responde `Ponto Saida OK - v3 - Aba Registros, painel de botoes, calculo por
-> mes`. O menu e as caixinhas, esses sim, rodam sempre o código salvo no editor.
+As abas que aquela versão tenha criado (`Feriados`, `<mês>_calculos`,
+`<mês>_registros`) ficam onde estão: apague à mão as que não quiser. O código
+não apaga aba nenhuma.
 
 ## Intervalo dentro da jornada
 
@@ -540,8 +349,8 @@ Sair e voltar dentro da **pausa máxima** (padrão **4h**) é *intervalo* — al
 café — e não abre jornada nova. Na volta, a trava de 12h não se aplica: vale só
 o intervalo curto (5 min), que segue barrando o toque duplo na tela de sucesso.
 
-Sem isso, quem saísse para o almoço às 11:30 só voltaria a bater às 23:30, e a
-coluna `E2` da aba do mês nunca encheria. Foi essa trava que motivou a mudança.
+Sem isso, quem saísse para o almoço às 11:30 só voltaria a bater às 23:30, e o
+almoço nem apareceria na planilha. Foi essa trava que motivou a mudança.
 
 Passada a pausa máxima, voltar é começar **outra jornada**, e a trava de 12h
 volta a valer. Quem está marcado como **plantão** não tem esse limite: para
@@ -557,10 +366,9 @@ Ajustável em **Admin → Configurações → Pausa máxima que continua a mesma
 jornada (horas)**. Use **0** para não permitir intervalo — volta o
 comportamento anterior.
 
-> ⚠️ **Esse número tem que ser igual ao `PAUSA_MAX_H` do `apps-script.gs`.** É
-> o mesmo limite dos dois lados: o app decide se aceita a volta, a planilha
-> decide se agrupa na mesma jornada. Se a planilha usar um limite menor, ela
-> parte em duas o que o app registrou como uma.
+> A planilha não usa mais esse número para nada — ela não agrupa jornada
+> nenhuma. Ele vale só do lado do app, para decidir se a volta é intervalo ou
+> jornada nova.
 
 ## Trava de 12 horas
 

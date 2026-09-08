@@ -73,52 +73,28 @@ teste cobre as duas metades:
 
 Executa o **`apps-script.gs` de verdade** numa VM do Node, contra um
 `SpreadsheetApp` falso que imita o comportamento real do `insertColumnBefore` e
-do `insertRowsBefore`.
+do `deleteRows`.
 
 O que importa: nenhuma migração pode perder as **chaves de deduplicação já
 gravadas**. Se perdesse, tudo que estivesse pendente nos celulares voltaria
-duplicado na planilha. São duas, empilhadas:
+duplicado na planilha.
 
-| Migração | O que ela faz |
+| Cenário | Esperado |
 |---|---|
-| 9 → 10 colunas | a `Precisão (m)` entrou antes da `Chave`; a coluna inteira é empurrada para a direita, com os dados |
-| cabeçalho linha 1 → linha 4 | abre espaço para o painel de botões; as linhas descem inteiras |
+| Planilha de 9 colunas em uso | a `Precisão (m)` entra antes da `Chave`, arrastando a coluna inteira com os dados |
+| Planilha vinda da versão com painel | as 3 linhas do painel e a coluna `Anulado` saem, o cabeçalho volta para a linha 1 e os registros ficam |
+| Reenvio do mesmo ponto | ignorado pela chave |
+| As duas cópias do Apps Script | o arquivo `.gs` e o literal embutido no `index.html` não podem divergir |
 
 ## `ponto2-planilha.test.js` — a planilha do ponto2
 
-Mesma técnica, com um mock de **várias abas**, para o que os botões novos fazem.
-Três coisas aqui são irreversíveis se derem errado:
+Mesma técnica, com um mock de **várias abas**, para as migrações de aba:
 
 | Cenário | Esperado |
 |---|---|
-| Só existe a `Saidas` antiga | vira `Registros`, com histórico e painel |
+| Só existe a `Saidas` antiga | vira `Registros`, com o histórico |
 | Existem `Registros` e `Saidas` | o que falta é absorvido pela chave; a antiga é **aposentada, não apagada** |
-| Mover dados de agosto | copia ordenado por funcionário, confere, apaga a origem, limpa linhas em branco; a foto viaja como **fórmula** |
-| Calcular horas de agosto | cria `agosto_calculos` sem tocar na `Registros` |
-| Mês escolhido sem registro | avisa quais meses têm, e não cria aba nenhuma |
-
-## `jornadas.test.js` e `raiz-jornadas.test.js` — as horas
-
-Carregam a seção de cálculo dos dois `apps-script.gs` numa VM e conferem o que
-vira dinheiro na folha. Um erro aqui não aparece na tela de ninguém: aparece no
-contracheque. Cada um imprime, ao final, a **aba do mês como sairia na
-planilha** — dá para conferir a olho.
-
-| Cenário | Esperado |
-|---|---|
-| Dia útil 07:00–17:00 com 1h de almoço | 9h, 8h normais + 1h a 50%; a pausa não conta |
-| Sábado, mesmo horário | 9h, mas só **4h** normais + 5h a 50% |
-| Turno 16:00 → 08:00 do dia seguinte | uma jornada só; a cota é do dia em que ela **começou**, então há 7h45 a 50% |
-| Duas jornadas na mesma sexta | dividem **uma** cota de 8h |
-| Jornada começando em feriado | só a parte do feriado a 100% |
-| Domingo | tudo a 100% |
-| Saída esquecida | jornada aberta e sinalizada, sem inventar hora |
-| — | `Normais + HE 50% + HE 100% = Total de horas` |
-
-O da raiz cobre ainda duas coisas só dela: o turno noturno **sem** o corte de
-meia-noite tem que aparecer como jornada aberta em vez de somar errado, e as
-**duas cópias** do Apps Script (o arquivo e o literal embutido no `index.html`)
-não podem divergir.
+| Planilha vinda da versão com painel | 3 linhas e a coluna `Anulado` saem; rodar de novo não apaga mais nada |
 
 ## Se um teste quebrar depois de mexer no app
 
