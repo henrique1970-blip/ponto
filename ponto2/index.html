@@ -20,7 +20,7 @@
   /* --orange: fundo. --orange-ink: o mesmo laranja escurecido, para o caso em que
      o laranja é TEXTO sobre branco (o #F5821F puro só dá 2,6:1 de contraste ali). */
   --orange:#F5821F;--orange2:#FB9D4B;--orange-ink:#B35309;
-  --green:#2E7D32;--green2:#43A047;--blue:#1565C0;
+  --green:#2E7D32;--green2:#43A047;--blue:#1565C0;--red:#C62828;
   --bg:#F0F4F8;--card:#FFF;--text:#1A1A2E;--text2:#6B7280;
   --border:#E5E7EB;--shadow:0 1px 4px rgba(0,0,0,.12);
 }
@@ -95,8 +95,13 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .btn-punch{width:100%;padding:17px;font-size:1.1rem;font-weight:800;border:none;border-radius:13px;cursor:pointer;
   transition:opacity .15s,transform .1s;background:#94A3B8;color:#fff;letter-spacing:.2px}
 .btn-punch:disabled{opacity:.45;cursor:not-allowed}
-.btn-punch.ready{background:var(--green);animation:glow 1.6s ease-in-out infinite}
-@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(46,125,50,.45)}50%{box-shadow:0 0 0 9px rgba(46,125,50,0)}}
+/* Entrada é verde, saída é VERMELHA: a cor é a primeira coisa que a pessoa vê,
+   e quem bate ponto de relance confirma pelo botão, não lê o rótulo. É a mesma
+   convenção do app da raiz. O --glow leva a cor para o keyframe, que continua
+   sendo um só. */
+.btn-punch.ready{background:var(--green);--glow:46,125,50;animation:glow 1.6s ease-in-out infinite}
+.btn-punch.ready.exit{background:var(--red);--glow:198,40,40}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(var(--glow),.45)}50%{box-shadow:0 0 0 9px rgba(var(--glow),0)}}
 .btn-punch:not(:disabled):active{opacity:.85;transform:scale(.98)}
 .btn-cancel{width:100%;margin-top:8px;padding:10px;font-size:.85rem;font-weight:700;border:none;border-radius:11px;
   background:#E5E7EB;color:var(--text2);cursor:pointer;display:none}
@@ -226,7 +231,7 @@ details summary{cursor:pointer;font-size:.82rem;color:var(--blue);font-weight:60
       <div class="co-thumb">👍</div>
       <div class="co-hint" id="coHint">
         Mostre o polegar para cima
-        <small>ou toque no botão verde abaixo</small>
+        <small>ou toque no botão abaixo</small>
       </div>
       <div class="co-live" id="coLive">👁 Pisque, abra a boca ou mexa a cabeça</div>
       <div class="co-timer" id="coTimer"></div>
@@ -578,7 +583,7 @@ const INTENT_GAP    = 1200;  // sumiu por mais que isso = saiu do quadro, recome
 // O RAIO só existe para o caso de a mão aparecer no canto oposto do quadro: 3,5
 // aceita até o braço totalmente esticado de lado (mediu 3,21).
 // Limite honesto: isso barra quem está do outro lado da sala, não quem está
-// ombro a ombro. Se falhar, o botão verde continua ali — degrada, não trava.
+// ombro a ombro. Se falhar, o botão continua ali — degrada, não trava.
 const GESTO_RAIO    =  3.5;  // distância máx. mão↔rosto, em larguras de rosto
 const GESTO_ESCALA  = 0.45;  // tamanho mín. da mão em relação à largura do rosto
 
@@ -1248,14 +1253,14 @@ function enterConfirm(match) {
 
   const canGesture = gestureOn && gestureRec;
   document.getElementById('coHint').innerHTML = canGesture
-    ? 'Mostre o polegar para cima <b>ao lado do rosto</b><br><small>ou toque no botão verde abaixo</small>'
-    : '<span class="gesture-off">Confirme no botão verde abaixo</span>';
+    ? 'Mostre o polegar para cima <b>ao lado do rosto</b><br><small>ou toque no botão abaixo</small>'
+    : '<span class="gesture-off">Confirme no botão abaixo</span>';
 
   document.getElementById('confirmOv').classList.add('on');
 
   const btn = document.getElementById('btnPunch');
   btn.disabled  = false;
-  btn.className = 'btn-punch ready';
+  btn.className = 'btn-punch ready' + (match.type === 'exit' ? ' exit' : '');
   btn.textContent = '✔ CONFIRMAR ' + rotulo(match.type).toUpperCase();
   document.getElementById('btnCancel').classList.add('on');
 }
@@ -1440,7 +1445,7 @@ function dicaLiveness() {
   if (!hint || liveOk) return;
   const t = liveFirstTs ? Date.now() - liveFirstTs : 0;
 
-  if (liveEscape)   hint.textContent = '⚠ Sem prova de vida — use o botão verde';
+  if (liveEscape)   hint.textContent = '⚠ Sem prova de vida — use o botão abaixo';
   else if (t > 3000) {
     const falta = Math.ceil((LIVE_ESCAPE - t) / 1000);
     hint.textContent = '😮 Abra bem a boca' + (falta > 0 ? ` · botão libera em ${falta}s` : '');

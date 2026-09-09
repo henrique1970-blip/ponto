@@ -17,7 +17,7 @@
 // v11: botão de instalar no cabeçalho e card de instalação no Admin.
 // v12: a jornada passou a admitir intervalo (almoço/café) — a trava longa
 //      não vale na volta de uma pausa curta.
-const CACHE = 'ponto-saida-v12';
+const CACHE = 'ponto-saida-v13';
 
 // Mesma origem — precisa funcionar para o app abrir offline.
 const CORE = [

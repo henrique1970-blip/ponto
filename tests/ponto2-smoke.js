@@ -118,6 +118,10 @@ async function esperaBoot(limite = 8000) {
      'a tela diz "Confirmar entrada"', w.document.querySelector('#confirmOv .co-hi').textContent);
   ok($('btnPunch').textContent === '✔ CONFIRMAR ENTRADA',
      'o botão diz CONFIRMAR ENTRADA', $('btnPunch').textContent);
+  // A cor é o que a pessoa lê de relance — mais do que o rótulo. Entrada verde,
+  // saída vermelha, como no app da raiz.
+  ok(!$('btnPunch').classList.contains('exit'),
+     'e fica VERDE — sem a classe exit', $('btnPunch').className);
 
   await w.__t.confirmPunch('botao');
   await sleep(400);
@@ -148,6 +152,9 @@ async function esperaBoot(limite = 8000) {
   await sleep(80);
   ok($('btnPunch').textContent === '✔ CONFIRMAR SAÍDA', 'agora o botão diz CONFIRMAR SAÍDA',
      $('btnPunch').textContent);
+  ok($('btnPunch').classList.contains('exit'),
+     'e fica VERMELHO — é o que separa saída de entrada num olhar',
+     $('btnPunch').className);
   await w.__t.confirmPunch('botao');
   await sleep(400);
   regs = await w.__t.dbAll('punches');
